@@ -1,0 +1,39 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git *)",
+      "Bash(npm *)",
+      "Bash(node *)",
+      "Bash(pm2 *)",
+      "Bash(mkdir *)",
+      "Bash(cp *)",
+      "Bash(mv *)",
+      "Bash(cat *)",
+      "Bash(ls *)",
+      "Bash(echo *)",
+      "Bash(touch *)",
+      "Bash(pwd)",
+      "Bash(which *)",
+      "Bash(curl *)",
+      "Bash(pip *)",
+      "Bash(python *)",
+      "Bash(python3 *)",
+      "Bash(sqlite3 *)",
+      "Bash(npx *)",
+      "Bash(rm *.js)",
+      "Bash(rm *.json)",
+      "Bash(rm *.md)",
+      "Bash(rm *.db-wal)",
+      "Bash(rm *.db-shm)"
+    ],
+    "deny": [
+      "Bash(rm -rf *)",
+      "Bash(rm -r *)",
+      "Bash(sudo *)",
+      "Bash(curl * | bash *)",
+      "Bash(curl * | sh *)",
+      "Bash(wget * | bash *)",
+      "Bash(chmod 777 *)"
+    ]
+  }
+}

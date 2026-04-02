@@ -1,0 +1,24 @@
+{
+  "name": "irrigation-monitor",
+  "version": "1.0.0",
+  "description": "Weather-intelligent irrigation system for Loomis, CA",
+  "main": "poll.js",
+  "scripts": {
+    "test": "node et-engine.test.js",
+    "et-logger": "node et-logger.js",
+    "server": "node server.js",
+    "start": "pm2 start ecosystem.config.js",
+    "stop": "pm2 stop ecosystem.config.js",
+    "restart": "pm2 restart ecosystem.config.js",
+    "logs": "pm2 logs"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.101.1",
+    "better-sqlite3": "^11.0.0",
+    "body-parser": "^2.2.2",
+    "dotenv": "^16.4.0",
+    "express": "^5.2.1",
+    "node-cron": "^3.0.3",
+    "twilio": "^5.13.1"
+  }
+}
