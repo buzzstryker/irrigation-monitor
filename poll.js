@@ -23,26 +23,63 @@ const zoneState = {};  // key: "controller:zone_id" → { on: bool, startedAt: n
 // Running tank level estimate (gallons)
 let tankLevel = tank.usable_gal;
 
+// Controller IDs discovered from the API (name → id mapping)
+let controllerMap = null;
+
 // ──────────────────────────────────────────────
 // Hydrawise API
 // ──────────────────────────────────────────────
 
 /**
- * Fetch statusschedule from Hydrawise API.
- * Returns the JSON response or null on error.
+ * Discover controller IDs from the Hydrawise customerdetails endpoint.
+ * Returns a map of controller name → controller_id.
  */
-async function fetchStatus() {
-  if (!API_KEY) {
-    console.warn('[POLL] HYDRAWISE_API_KEY not set — polling disabled');
-    return null;
-  }
+async function discoverControllers() {
+  if (!API_KEY) return null;
 
-  const url = `https://api.hydrawise.com/api/v1/statusschedule.php?api_key=${API_KEY}`;
+  const url = `https://api.hydrawise.com/api/v1/customerdetails.php?api_key=${API_KEY}&type=controllers`;
 
   try {
     const res = await fetch(url);
     if (!res.ok) {
-      console.error(`[POLL] Hydrawise API error: ${res.status}`);
+      console.error(`[POLL] Hydrawise customerdetails error: ${res.status}`);
+      return null;
+    }
+    const data = await res.json();
+    const map = {};
+
+    if (data.controllers && Array.isArray(data.controllers)) {
+      for (const ctrl of data.controllers) {
+        map[ctrl.name] = ctrl.controller_id;
+        console.log(`[POLL] Discovered controller: "${ctrl.name}" (id: ${ctrl.controller_id})`);
+      }
+    }
+
+    return Object.keys(map).length > 0 ? map : null;
+  } catch (err) {
+    console.error(`[POLL] Controller discovery failed: ${err.message}`);
+    return null;
+  }
+}
+
+/**
+ * Fetch statusschedule from Hydrawise API for a specific controller.
+ * If controllerId is null, fetches the default controller.
+ */
+async function fetchStatus(controllerId) {
+  if (!API_KEY) {
+    return null;
+  }
+
+  let url = `https://api.hydrawise.com/api/v1/statusschedule.php?api_key=${API_KEY}`;
+  if (controllerId) {
+    url += `&controller_id=${controllerId}`;
+  }
+
+  try {
+    const res = await fetch(url);
+    if (!res.ok) {
+      console.error(`[POLL] Hydrawise API error (controller ${controllerId || 'default'}): ${res.status}`);
       return null;
     }
     return await res.json();
@@ -53,39 +90,32 @@ async function fetchStatus() {
 }
 
 /**
- * Map Hydrawise relay data to our zone config.
+ * Parse Hydrawise relay data for a specific controller.
  * Returns array of { controller, zone_id, relay_id, name, gpm, running, run_seconds, flow }
  */
-function parseRelays(apiData) {
+function parseRelays(apiData, ctrlConfig) {
   const results = [];
-
-  // The Hydrawise API returns relays with relay numbers.
-  // We match by relay number against our zones.config.
   const relays = apiData.relays || [];
 
   for (const relay of relays) {
-    // Determine which controller this relay belongs to
-    // Hydrawise returns a "name" field on each relay that includes the zone name
     const relayId = relay.relay;
-    const running = relay.time === 1 || (relay.timestr && relay.timestr.toLowerCase().includes('running'));
+    const running = relay.time === 1 ||
+      (typeof relay.timestr === 'string' && relay.timestr.toLowerCase().includes('running'));
     const runSec = relay.run || 0;
 
-    // Try to find matching zone in our config
-    for (const ctrl of controllers) {
-      const zone = ctrl.zones.find(z => z.relay_id === relayId);
-      if (zone) {
-        results.push({
-          controller: ctrl.name,
-          zone_id: zone.zone_id,
-          relay_id: relayId,
-          name: zone.name,
-          gpm: zone.gpm,
-          running,
-          run_seconds: runSec,
-          flow: relay.flow || 0,
-        });
-        break;
-      }
+    // Match by relay number against this controller's zone config
+    const zone = ctrlConfig.zones.find(z => z.relay_id === relayId);
+    if (zone) {
+      results.push({
+        controller: ctrlConfig.name,
+        zone_id: zone.zone_id,
+        relay_id: relayId,
+        name: zone.name,
+        gpm: zone.gpm,
+        running,
+        run_seconds: runSec,
+        flow: relay.flow || 0,
+      });
     }
   }
 
@@ -204,18 +234,43 @@ let pollCount = 0;
 
 async function poll() {
   pollCount++;
-  const db = getDb(); // ensure tables exist on first run
+  const db = getDb();
 
-  const data = await fetchStatus();
-  if (!data) {
-    // API not available — still update tank level with no zones running
-    updateTankLevel([]);
-    return;
+  // Discover controller IDs on first poll
+  if (!controllerMap) {
+    controllerMap = await discoverControllers();
+    if (!controllerMap) {
+      console.warn('[POLL] Could not discover controllers — will retry next cycle');
+      updateTankLevel([]);
+      return;
+    }
   }
 
-  const zones = parseRelays(data);
-  processZoneStates(zones);
-  updateTankLevel(zones);
+  let allZones = [];
+
+  // Poll each controller separately
+  for (const ctrl of controllers) {
+    const ctrlId = controllerMap[ctrl.name];
+    if (!ctrlId) {
+      // Controller not found in Hydrawise account (e.g. Barn not yet registered)
+      continue;
+    }
+
+    const data = await fetchStatus(ctrlId);
+    if (!data) continue;
+
+    const zones = parseRelays(data, ctrl);
+    allZones = allZones.concat(zones);
+  }
+
+  processZoneStates(allZones);
+  updateTankLevel(allZones);
+
+  // Log every poll on first cycle, then every 5 minutes
+  const running = allZones.filter(z => z.running);
+  if (pollCount === 1 || pollCount % 5 === 0) {
+    console.log(`[POLL] Cycle #${pollCount} | Tank: ${Math.round(tankLevel)} gal | Zones polled: ${allZones.length} | Running: ${running.length}`);
+  }
 
   // Periodic sync to Supabase (every 5 minutes)
   if (pollCount % 5 === 0) {
@@ -224,12 +279,6 @@ async function poll() {
     } catch (err) {
       console.error(`[POLL] Sync error: ${err.message}`);
     }
-  }
-
-  // Periodic status log (every 5 minutes)
-  if (pollCount % 5 === 0) {
-    const running = zones.filter(z => z.running);
-    console.log(`[POLL] Cycle #${pollCount} | Tank: ${Math.round(tankLevel)} gal | Running: ${running.length} zones`);
   }
 }
 
@@ -240,6 +289,7 @@ async function poll() {
 console.log('[POLL] Hydrawise polling service starting');
 console.log(`[POLL] Controllers: ${controllers.map(c => c.name).join(', ')}`);
 console.log(`[POLL] Poll interval: ${POLL_INTERVAL_MS / 1000}s`);
+console.log(`[POLL] API key: ${API_KEY ? 'loaded (' + API_KEY.length + ' chars)' : 'NOT SET'}`);
 
 if (!API_KEY) {
   console.warn('[POLL] HYDRAWISE_API_KEY not set in .env — will poll but get no data');

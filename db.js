@@ -112,6 +112,24 @@ function initializeDatabase(db) {
     )
   `);
 
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS zone_daily_analysis (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      date TEXT NOT NULL,
+      zone_id TEXT NOT NULL,
+      controller TEXT NOT NULL,
+      et_inches REAL,
+      kz_value REAL,
+      target_gallons REAL,
+      actual_gallons REAL,
+      delta_gallons REAL,
+      delta_pct REAL,
+      notes TEXT,
+      created_at INTEGER DEFAULT (unixepoch()),
+      UNIQUE(date, zone_id, controller)
+    )
+  `);
+
   // ──────────────────────────────────────────────
   // Phase 3 — Twilio SMS Integration
   // ──────────────────────────────────────────────

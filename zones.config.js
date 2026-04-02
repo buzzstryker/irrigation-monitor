@@ -10,7 +10,7 @@
 module.exports = {
   controllers: [
     {
-      name: 'Garage',
+      name: 'Loomis Garage',
       zones: [
         { relay_id: 1, zone_id: 'Z1', name: 'Frontyard East Sod', type: 'sod', gpm: 7.8 },
         { relay_id: 2, zone_id: 'Z2', name: 'Frontyard West Sod', type: 'sod', gpm: 14.4 },
@@ -24,7 +24,7 @@ module.exports = {
       ],
     },
     {
-      name: 'Pool Equipment',
+      name: 'Loomis Pool Equipment',
       zones: [
         { relay_id: 1, zone_id: 'Z1', name: 'Pool Drip', type: 'drip', gpm: 1.7 },
         { relay_id: 2, zone_id: 'Z2', name: 'Soccer West South', type: 'sod', gpm: 9.2 },
@@ -40,7 +40,7 @@ module.exports = {
       ],
     },
     {
-      name: 'Barn',
+      name: 'Loomis barn',
       zones: [
         { relay_id: 1, zone_id: 'Z1', name: 'Iris & Street Front Drip', type: 'drip', gpm: null },
         { relay_id: 2, zone_id: 'Z2', name: 'Barn Fruit Trees', type: 'drip', gpm: null },

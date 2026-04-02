@@ -74,17 +74,31 @@ cron.schedule('5 2 * * *', async () => {
 }, { timezone: TIMEZONE });
 
 /**
- * 2:10 AM — Calculate and queue today's zone run schedule
+ * 2:10 AM — Log daily zone analysis (target vs actual for yesterday)
  */
-cron.schedule('10 2 * * *', async () => {
-  console.log('[CRON] 2:10 AM — Schedule calculation started');
+cron.schedule('10 2 * * *', () => {
+  console.log('[CRON] 2:10 AM — Daily zone analysis started');
   try {
-    // Phase 4 stub — will calculate zone runtimes from ET × Kz × area
-    // and issue setzone commands via Hydrawise API
-    console.log('[CRON] 2:10 AM — Schedule calculation is a Phase 4 feature (stub)');
-    console.log('[CRON] 2:10 AM — Schedule calculation complete');
+    const { logDailyComparison } = require('./coefficient-model');
+    const rows = logDailyComparison(); // defaults to yesterday
+    console.log(`[CRON] 2:10 AM — Analysis complete: ${rows.length} zones logged`);
   } catch (err) {
-    console.error('[CRON] 2:10 AM — Schedule calculation failed:', err.message);
+    console.error('[CRON] 2:10 AM — Daily analysis failed:', err.message);
+  }
+}, { timezone: TIMEZONE });
+
+/**
+ * 2:15 AM — Generate and log daily report
+ */
+cron.schedule('15 2 * * *', () => {
+  console.log('[CRON] 2:15 AM — Daily report started');
+  try {
+    const { generateReport } = require('./reports/daily-report');
+    const report = generateReport(); // defaults to yesterday
+    console.log(report);
+    console.log('[CRON] 2:15 AM — Daily report complete');
+  } catch (err) {
+    console.error('[CRON] 2:15 AM — Daily report failed:', err.message);
   }
 }, { timezone: TIMEZONE });
 
@@ -140,6 +154,6 @@ cron.schedule('0 8 1 * *', async () => {
   }
 }, { timezone: TIMEZONE });
 
-console.log('[CRON] Scheduler initialized — 5 cron jobs registered');
+console.log('[CRON] Scheduler initialized — 7 cron jobs registered');
 
 module.exports = {};
