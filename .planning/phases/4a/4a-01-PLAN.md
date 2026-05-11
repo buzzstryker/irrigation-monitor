@@ -29,8 +29,7 @@ must_haves:
       provides: "flow_calibration_log table"
       min_lines: 20
     - path: "db.js"
-      provides: "Updated table count (17 tables)"
-      contains: "17 tables"
+      provides: "Updated table count (19 tables)"`n      contains: "19 tables"
 ---
 
 See full plan content...
