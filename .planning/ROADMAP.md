@@ -1,7 +1,7 @@
 ﻿# Roadmap — irrigation-monitor
 
 **Scope:** Phases 3 through 7
-**Current Phase:** 3 (Twilio SMS - in progress)
+**Current Phase:** 4a (Attribution Infrastructure - active)
 
 ---
 
@@ -9,7 +9,7 @@
 
 **Goal:** Complete SMS command interface and notification system
 
-**Status:** 🔄 In Progress
+**Status:** ⏸️ Paused (resuming after Phase 4a)
 **Priority:** High
 **Estimated Duration:** 1-2 weeks
 
@@ -69,25 +69,77 @@
 
 ---
 
-## Phase 4: Scheduling Takeover (Hydrawise setzone API)
+## Phase 4a: Attribution Infrastructure
+
+**Goal:** Land all schema, config, and module changes required to support flowMeterAttribution. Additive only — no runtime behavior change. Unblocks Phase 4b and unblocks the calibration runs that produce accurate Pool Equipment zone GPMs.
+
+**Status:** 🔄 Active
+**Priority:** High (blocks Phase 4b; accurate Pool Equip GPMs needed before summer scheduling)
+**Estimated Duration:** 3-5 sessions
+**Blockers:** None (additive work, safe to land while Phase 0-2 polling continues)
+
+### Tasks
+
+**4a.1 Schema Migrations**
+- [ ] migration_flow_attribution.sql — watering_events column additions, flow_attribution_warnings table, controller_flow_meter_health table, controller_flow_meter_health_log table
+- [ ] migration_z5_selftest_log.sql — z5_selftest_log table
+- [ ] migration_flow_calibration_log.sql — flow_calibration_log table
+- [ ] Apply migrations to local SQLite db; verify tables exist; commit migration files
+
+**4a.2 zones.config.js Patch**
+- [ ] Add hasFlowMeter, flowMeterHealthy fields to all three controllers
+- [ ] Add flowMeterAttribution block to POOL_EQUIP
+- [ ] Add SYSTEM CRITICAL warning comment block above Garage Z5 definition
+- [ ] Mark Z5 as capped: true with cappedAt date and role='attribution_gate'
+- [ ] Export groupControllersByAttribution helper function
+
+**4a.3 z5-startup-selftest.js Module**
+- [ ] Implement runZ5SelfTest() with preflight checks (no other zones active, meter healthy), valve cycling, sample analysis, threshold check, log writing
+- [ ] Add skipIfRecent guard (don't cycle valve more than once per 24h on restart)
+- [ ] Standalone module — NOT wired into service startup yet (wiring is a separate decision)
+
+**4a.4 flow-calibration.js Module**
+- [ ] Implement runCalibration() — preflight gates, open Z5 then target Pool zone, sample Garage meter, close zones, tank-drawdown cross-check, log result, recommend GPM update
+- [ ] CLI interface: node flow-calibration.js --zone pool-equip-zN [--duration 300] [--dry-run]
+- [ ] Does NOT auto-write to zones.config.js — human reviews logged results and updates config manually
+
+**4a.5 CLAUDE.md Update**
+- [ ] Document Z5's new role (attribution gate, capped, system critical)
+- [ ] Document flowMeterAttribution mechanism in a Key Design Decisions entry
+- [ ] Update Z5 row in Garage controller table to reflect capped status and new role
+- [ ] Add Phase 4 split (4a vs 4b) to Implementation Phases table
+
+**4a.6 Calibration Runs** (after 4a.1–4a.5 land)
+- [ ] Apply schema migrations to local db
+- [ ] Run z5-startup-selftest.js manually once to confirm Z5 reads <0.3 GPM (threshold from design)
+- [ ] Run flow-calibration.js for each of the 11 Pool Equipment zones in dry-run mode first, then live
+- [ ] Update zones.config.js with measured GPM values; commit
+
+**4a.7 Decide pm2 Process Wiring** (deferred)
+- [ ] Decide whether irrigation-poll or irrigation-server runs the Z5 startup self-test on service start
+- [ ] Wire selected process; verify both processes still start cleanly after restart
+
+---
+
+## Phase 4b: Scheduling Cutover
 
 **Goal:** Replace Hydrawise programs with software-owned scheduling
 
 **Status:** ⬜ Pending
 **Priority:** High
 **Estimated Duration:** 3-4 weeks
-**Blockers:** Phase 3 complete, setzone API design finalized
+**Blockers:** Phase 4a complete, Phase 3 complete, setzone API design finalized
 
 ### Tasks
 
-**4.1 setzone API Integration**
+**4b.1 setzone API Integration**
 - [ ] Research Hydrawise setzone API endpoint and auth
 - [ ] Implement setzone() function: POST to Hydrawise API
 - [ ] Test with single zone: open Z6 for 5 minutes, verify via polling
 - [ ] Implement zone close (stop) command
 - [ ] Log all setzone calls with timestamps
 
-**4.2 Daily Scheduling Algorithm**
+**4b.2 Daily Scheduling Algorithm**
 - [ ] Create scheduler.js → dailySchedule() function
 - [ ] Fetch today's ET from et_log table
 - [ ] Calculate target gallons per zone: baseline × (ET/ET_avg) × Kz
@@ -95,43 +147,43 @@
 - [ ] Sort zones by priority (sod first, drips second)
 - [ ] Build schedule to complete by 6 AM
 
-**4.3 Flow Meter Attribution**
-- [ ] Implement flowMeterAttribution in zones.config.js
-- [ ] Map Pool Equipment zones → Garage meter via Z5 gating
+**4b.3 Flow Meter Attribution Runtime**
+- [ ] Implement attribution logic in poll.js: map Pool Equipment flow → Garage meter
+- [ ] Use Z5 gating signal to detect Pool Equipment zone activity
 - [ ] Create attribution timeline: Garage + Pool Equipment serialized
-- [ ] Test: run Pool Z1, verify Garage meter increments
+- [ ] Test: run Pool Z1, verify Garage meter increments correctly
 
-**4.4 Tank Safety Logic**
+**4b.4 Tank Safety Logic**
 - [ ] Check tank level before scheduling
 - [ ] Calculate total gallons needed for schedule
 - [ ] Abort if final tank level < 450 gal safety floor
 - [ ] Alert user: "Insufficient tank capacity for today's schedule"
 
-**4.5 Rain/Weather Skip**
+**4b.5 Rain/Weather Skip**
 - [ ] Fetch forecast from Open-Meteo (3-day lookahead)
 - [ ] Skip logic: ET < 0.05 OR forecast rain > 0.25 OR yesterday > 0.5 OR temp < 68°F
 - [ ] Log skip reason to warnings table
 - [ ] Notify user: "Irrigation skipped today: [reason]"
 
-**4.6 Program Suspension**
+**4b.6 Program Suspension**
 - [ ] Suspend all Hydrawise programs via API
 - [ ] Daily check: verify programs still suspended
 - [ ] Conflict detection: alert if program re-enabled
 - [ ] Fallback: re-suspend automatically or alert user
 
-**4.7 Execution Engine**
+**4b.7 Execution Engine**
 - [ ] Execute schedule: issue setzone commands sequentially
 - [ ] Poll zone state every 60s to confirm execution
 - [ ] Track actual runtime vs planned
 - [ ] Handle errors: retry failed setzone, log to warnings table
 
-**4.8 Testing**
+**4b.8 Testing**
 - [ ] Unit tests for scheduling algorithm (gallons → runtime)
 - [ ] Integration test: fetch ET, calculate schedule, execute (dry-run mode)
 - [ ] End-to-end test: full cycle from 2 AM ET log to 6 AM completion
 - [ ] Test skip logic: manually set ET < 0.05, verify skip
 
-**4.9 Web Dashboard (Next.js + Supabase)**
+**4b.9 Web Dashboard (Next.js + Supabase)**
 - [ ] Create Next.js app in new web/ directory
 - [ ] Setup Supabase project, deploy schema.sql
 - [ ] Implement sync.js: SQLite → Supabase hourly
@@ -148,7 +200,7 @@
 **Status:** ⬜ Pending
 **Priority:** Medium
 **Estimated Duration:** 2-3 weeks
-**Blockers:** Phase 4 complete (Kz adjustments need active scheduling)
+**Blockers:** Phase 4b complete (Kz adjustments need active scheduling)
 
 ### Tasks
 
@@ -283,12 +335,14 @@
 - MMS with zone photos
 - Deployment to Railway
 
-### Milestone 2: Scheduling Takeover (Phase 4 complete)
-- Hydrawise programs suspended
-- Daily ET-based scheduling operational
-- Flow meter attribution working
-- Tank safety checks in place
-- Web dashboard live on Vercel
+### Milestone 2: Scheduling Takeover (Phases 4a + 4b complete)
+- Attribution infrastructure in place (4a)
+- Pool Equipment zone GPMs accurately measured (4a)
+- Hydrawise programs suspended (4b)
+- Daily ET-based scheduling operational (4b)
+- Flow meter attribution working at runtime (4b)
+- Tank safety checks in place (4b)
+- Web dashboard live on Vercel (4b)
 
 ### Milestone 3: Feedback Loop (Phase 5 complete)
 - Monthly check-ins automated
@@ -305,4 +359,4 @@
 ---
 
 *Last updated: 2026-05-11*
-*Next: /gsd-plan-phase 3 to start execution*
+*Next: /gsd-plan-phase 4a to generate detailed task plan*
