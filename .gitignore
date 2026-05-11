@@ -5,3 +5,10 @@ irrigation.db-wal
 irrigation.db-shm
 logs/
 *.log
+
+# Claude Code session-local config
+.claude/
+
+# OS files
+Thumbs.db
+.DS_Store
