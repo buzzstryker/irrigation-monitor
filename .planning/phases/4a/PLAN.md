@@ -85,7 +85,18 @@ created: 2026-05-11
 - [ ] BARN: add hasFlowMeter: false, flowMeterHealthy: null
 
 **4a.2.2 Add flowMeterAttribution block to POOL_EQUIP**
-- [ ] flowMeterAttribution: { sourceControllerId: 'GARAGE', sourceMeterRelay: null, gatingRelay: 5, gatingZoneName: 'Z5', gateBufferSec: 30, gateStaggerMs: 2000, reason: 'Pool Equipment flow meter broken', establishedAt: '2026-05-11', degradationBehavior: 'estimate', estimateSource: 'duration' }
+- [ ] flowMeterAttribution: {
+      sourceControllerId: 1659477,  // Numeric Hydrawise controller ID — must match the id field on the GARAGE controller config object. String 'GARAGE' would not match at runtime; poll.js and setzone calls use numeric IDs.
+      sourceMeterRelay: null,
+      gatingRelay: 5,
+      gatingZoneName: 'Garage Z5 (capped dummy)',
+      gateBufferSec: 30,
+      gateStaggerMs: 2000,
+      reason: 'Pool Equip meter unreliable; Pool zones are downstream of Garage flow meter',
+      establishedAt: '2026-05-11',
+      degradationBehavior: 'estimate',
+      estimateSource: 'zones.config.js gpm field'  // When meter is unhealthy, estimated mode computes gallons = config_gpm × runtime_min using the GPM field on the zone in zones.config.js. This is NOT pure duration-scaling (which is what the Barn controller does because it has no measured GPMs). Pool Equip zones DO have measured GPMs (after calibration), so estimated mode uses those measurements multiplied by runtime.
+    }
 
 **4a.2.3 Mark Garage Z5 as capped**
 - [ ] Add SYSTEM CRITICAL comment block above Z5 definition: "// SYSTEM CRITICAL: Z5 is capped and serves as the attribution gate for Pool Equipment flow metering. DO NOT uncap or modify without coordination with flow attribution logic."
