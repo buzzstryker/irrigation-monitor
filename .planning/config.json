@@ -1,0 +1,19 @@
+{
+  "version": "1.0",
+  "workflow": {
+    "commitStrategy": "atomic",
+    "verificationLevel": "standard",
+    "researchEnabled": false,
+    "testingRequired": true
+  },
+  "project": {
+    "name": "irrigation-monitor",
+    "type": "backend-service",
+    "scope": "Phase 3 through Phase 7"
+  },
+  "references": {
+    "operational": ".claude/CLAUDE.md",
+    "procedural": "Project_Context.md",
+    "codebase": ".planning/codebase/"
+  }
+}
