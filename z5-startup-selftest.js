@@ -1,5 +1,5 @@
-/**
- * z5-startup-selftest.js � Garage Z5 cap integrity self-test
+﻿/**
+ * z5-startup-selftest.js — Garage Z5 cap integrity self-test
  * 
  * Phase 4a Wave 3: Standalone module (NOT wired to service startup yet)
  * 
@@ -13,6 +13,7 @@
  */
 
 const { getDb } = require('./db');
+const hydrawise = require('./hydrawise-api');
 
 // Constants
 const THRESHOLD_GPM = 0.3;  // Z5 flow must be below this to pass (cap integrity check)

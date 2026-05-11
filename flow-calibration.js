@@ -1,5 +1,5 @@
-/**
- * flow-calibration.js — Pool Equipment zone GPM calibration tool
+ï»¿/**
+ * flow-calibration.js â€” Pool Equipment zone GPM calibration tool
  * 
  * Phase 4a Wave 4: CLI tool for measuring Pool Equipment zone GPMs
  * 
@@ -17,6 +17,7 @@
  */
 
 const { getDb } = require('./db');
+const hydrawise = require('./hydrawise-api');
 const zonesConfig = require('./zones.config');
 
 // Constants
@@ -227,7 +228,7 @@ if (require.main === module) {
       }
 
       // Live result
-      console.log(`[CALIBRATION] Measured GPM: ${result.meterGPM.toFixed(2)} ± ${result.meterStddev.toFixed(2)}`);
+      console.log(`[CALIBRATION] Measured GPM: ${result.meterGPM.toFixed(2)} Â± ${result.meterStddev.toFixed(2)}`);
       console.log(`[CALIBRATION] Tank GPM: ${result.tankGPM.toFixed(2)} (agreement: ${result.agreementPct.toFixed(1)}%)`);
       console.log(`[CALIBRATION] Confidence: ${result.confidence}`);
       console.log(`[CALIBRATION] RECOMMENDATION: Update zones.config.js Pool Equipment Z${poolZoneRelay}.gpm = ${result.meterGPM.toFixed(1)}`);
