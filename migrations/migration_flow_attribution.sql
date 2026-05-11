@@ -1,4 +1,4 @@
-﻿-- Migration: Flow Attribution Infrastructure
+-- Migration: Flow Attribution Infrastructure
 -- Phase: 4a
 -- Created: 2026-05-11
 -- Purpose: Add tables and columns to support flow meter attribution for Pool Equipment zones
@@ -27,7 +27,7 @@ CREATE TABLE IF NOT EXISTS controller_flow_meter_health (
 );
 
 -- Controller flow meter health transition log
--- Logs healthy↔unhealthy transitions only (not every health check — only state changes)
+-- Logs healthy?unhealthy transitions only (not every health check � only state changes)
 CREATE TABLE IF NOT EXISTS controller_flow_meter_health_log (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     controller_id INTEGER NOT NULL,
@@ -50,4 +50,4 @@ VALUES (1659477, 1, datetime('now'), NULL, NULL, 'Initial state - meter will be 
 
 -- Pool Equipment: meter permanently broken (physical hardware issue)
 INSERT OR REPLACE INTO controller_flow_meter_health (controller_id, is_healthy, last_assessed, valid_fraction, sample_count, reason)
-VALUES (1659478, 0, datetime('now'), 0.0, 0, 'Physical flow meter broken - using Garage meter attribution via Z5 gating');
+VALUES (1977673, 0, datetime('now'), 0.0, 0, 'Physical flow meter broken - using Garage meter attribution via Z5 gating');

@@ -1,5 +1,5 @@
-# CLAUDE.md — Irrigation Monitor
-## Loomis, California Property — Weather-Intelligent Irrigation System
+ï»¿# CLAUDE.md â€” Irrigation Monitor
+## Loomis, California Property â€” Weather-Intelligent Irrigation System
 
 This file gives Claude Code instant context about the project. Read this before writing any code.
 
@@ -7,11 +7,11 @@ This file gives Claude Code instant context about the project. Read this before 
 
 ## Project Overview
 
-A Node.js service running on a Lenovo Legion (Windows/WSL) that replaces static Hydrawise programmed schedules with a dynamic, ET-driven zone controller. The system learns optimal water application rates per zone through a structured SMS observation feedback loop. All zone commands are issued via the Hydrawise `setzone` API. The Hydrawise app becomes monitoring-only — scheduling is owned by this software.
+A Node.js service running on a Lenovo Legion (Windows/WSL) that replaces static Hydrawise programmed schedules with a dynamic, ET-driven zone controller. The system learns optimal water application rates per zone through a structured SMS observation feedback loop. All zone commands are issued via the Hydrawise `setzone` API. The Hydrawise app becomes monitoring-only â€” scheduling is owned by this software.
 
 **Local project path:** `C:\Users\buzzs\Desktop\Projects\irrigation-monitor\`
-**GitHub:** Not yet pushed — create repo at github.com/buzzstryker/irrigation-monitor
-**Node version:** v22.22.2 (downgraded from 24 — better-sqlite3 requires this)
+**GitHub:** Not yet pushed â€” create repo at github.com/buzzstryker/irrigation-monitor
+**Node version:** v22.22.2 (downgraded from 24 â€” better-sqlite3 requires this)
 **Process manager:** pm2 (two processes: irrigation-poll, irrigation-server)
 
 ---
@@ -20,28 +20,28 @@ A Node.js service running on a Lenovo Legion (Windows/WSL) that replaces static 
 
 ```
 Lenovo (always on)
-+-- poll.js                    — Hydrawise polling every 60s, all 3 controllers
-+-- server.js                  — Express port 3001, 8 endpoints
-+-- et-engine.js               — Open-Meteo fetch + Penman-Monteith ETo
-+-- et-logger.js               — Daily 2AM cron, logs actual + forecast ET
-+-- scheduler.js               — 7 cron jobs
-+-- coefficient-model.js       — Zone Kz model, daily target vs actual
-+-- sync.js                    — SQLite ? Supabase sync
-+-- zones.config.js            — Full zone inventory + tank constants + flowMeterAttribution
-+-- db.js                      — better-sqlite3, 18 tables, getDb() sync pattern
-+-- z5-startup-selftest.js     — Garage Z5 cap integrity self-test (Phase 4a)
-+-- flow-calibration.js        — Pool Equipment zone GPM calibration CLI (Phase 4a)
-+-- migrations/                — SQL migration files (Phase 4a+)
++-- poll.js                    â€” Hydrawise polling every 60s, all 3 controllers
++-- server.js                  â€” Express port 3001, 8 endpoints
++-- et-engine.js               â€” Open-Meteo fetch + Penman-Monteith ETo
++-- et-logger.js               â€” Daily 2AM cron, logs actual + forecast ET
++-- scheduler.js               â€” 7 cron jobs
++-- coefficient-model.js       â€” Zone Kz model, daily target vs actual
++-- sync.js                    â€” SQLite ? Supabase sync
++-- zones.config.js            â€” Full zone inventory + tank constants + flowMeterAttribution
++-- db.js                      â€” better-sqlite3, 18 tables, getDb() sync pattern
++-- z5-startup-selftest.js     â€” Garage Z5 cap integrity self-test (Phase 4a)
++-- flow-calibration.js        â€” Pool Equipment zone GPM calibration CLI (Phase 4a)
++-- migrations/                â€” SQL migration files (Phase 4a+)
 +-- sms/
-¦   +-- handler.js             — Twilio inbound webhook
-¦   +-- sender.js              — sendSMS(), sendMMS(), broadcast()
-¦   +-- commands.js            — STATUS, TANK, SUSPEND, RESUME, SKIP TODAY, DITCH CHECK
+Â¦   +-- handler.js             â€” Twilio inbound webhook
+Â¦   +-- sender.js              â€” sendSMS(), sendMMS(), broadcast()
+Â¦   +-- commands.js            â€” STATUS, TANK, SUSPEND, RESUME, SKIP TODAY, DITCH CHECK
 +-- reports/
-¦   +-- daily-report.js        — Console report, target vs actual per zone
+Â¦   +-- daily-report.js        â€” Console report, target vs actual per zone
 +-- supabase/
-¦   +-- schema.sql             — Postgres schema with RLS
-¦   +-- seed.sql               — All 3 controllers, 22 zones
-+-- ecosystem.config.js        — pm2: irrigation-poll + irrigation-server
+Â¦   +-- schema.sql             â€” Postgres schema with RLS
+Â¦   +-- seed.sql               â€” All 3 controllers, 22 zones
++-- ecosystem.config.js        â€” pm2: irrigation-poll + irrigation-server
 ```
 
 ---
@@ -54,10 +54,10 @@ Lenovo (always on)
 | Tank capacity | 1,725 gal total, 981 gal usable |
 | Pump cutoff | ~408 gal (dry-run sensor) |
 | Ditch fill rate | 4.29 GPM (257 GPH, 24/7) |
-| Ditch water season | April 15 – October 15 |
-| City water season | March 15 – April 14 (BARN LOCATION ONLY) |
-| Off-season | October 16 – March 14 |
-| Spring sod multiplier | 0.67× summer demand |
+| Ditch water season | April 15 â€“ October 15 |
+| City water season | March 15 â€“ April 14 (BARN LOCATION ONLY) |
+| Off-season | October 16 â€“ March 14 |
+| Spring sod multiplier | 0.67Ã— summer demand |
 | ET summer baseline | 0.25 in/day |
 | Tank safety floor | 450 gal (never schedule below this) |
 
@@ -65,7 +65,7 @@ Lenovo (always on)
 
 ## Controllers & Zones
 
-### Garage Controller (id: 1659477) — flow meter healthy (recently restored)
+### Garage Controller (id: 1659477) â€” flow meter healthy (recently restored)
 | Zone | Name | Type | GPM |
 |------|------|------|-----|
 | Z1 | Frontyard East Sod | Sod | 7.8 |
@@ -80,7 +80,7 @@ Lenovo (always on)
 
 **Z5 CRITICAL:** Capped and serves as attribution gate for Pool Equipment flow metering. Valve opens for gating signal but cap prevents flow. Self-test on startup verifies cap integrity (<0.3 GPM). **DO NOT uncap without coordinating with flow attribution logic.**
 
-### Pool Equipment Controller (id: 1659478) — flow meter broken (using Garage attribution)
+### Pool Equipment Controller (id: 1977673) â€” physical flow meter broken; flow attributed to Garage meter via Z5 gating (per Phase 4a, 2026-05-11)
 | Zone | Name | Type | GPM |
 |------|------|------|-----|
 | Z1 | Pool Drip | Drip | 1.7 |
@@ -97,13 +97,13 @@ Lenovo (always on)
 
 **Note:** GPM values are estimates until Phase 4a calibration runs complete.
 
-### Barn Controller (id: 1970558) — NO flow meter, duration scaling only
+### Barn Controller (id: 1970558) â€” NO flow meter, duration scaling only
 | Zone | Name | Type | GPM |
 |------|------|------|-----|
 | Z5 | Iris & Street Front Drip | Drip | TBD |
 | Z6 | Barn Fruit Trees Drip | Drip | TBD |
 
-**Honcut Ranch (id: 1659099):** On Hydrawise account but OUT OF SCOPE — do not include.
+**Honcut Ranch (id: 1659099):** On Hydrawise account but OUT OF SCOPE â€” do not include.
 
 ---
 
@@ -123,7 +123,7 @@ Lenovo (always on)
 | scheduled_reminders | 5 | Check-in SMS schedule |
 | ditch_health_log | 6 | Daily flow meter diagnostic |
 | tank_sensor_log | 7 | ESP32 ultrasonic sensor readings |
-| user_preferences | — | Per-user language, phone, role |
+| user_preferences | â€” | Per-user language, phone, role |
 | flow_attribution_warnings | 4a | Flow attribution ambiguity events |
 | controller_flow_meter_health | 4a | Per-controller meter health state |
 | controller_flow_meter_health_log | 4a | Meter health transition log |
@@ -132,8 +132,8 @@ Lenovo (always on)
 
 **Phase 4a additions to watering_events:** `flow_source`, `flow_source_controller_id`, `flow_quality` columns
 
-**Pattern:** Always use `getDb()` from db.js — synchronous better-sqlite3.
-**Never use:** async initDb() or sql.js — was a failed workaround, now replaced.
+**Pattern:** Always use `getDb()` from db.js â€” synchronous better-sqlite3.
+**Never use:** async initDb() or sql.js â€” was a failed workaround, now replaced.
 
 ---
 
@@ -144,7 +144,7 @@ Lenovo (always on)
 | 0 | ? Complete | Hydrawise polling, zone state, tank model |
 | 1 | ? Complete | ET engine (Open-Meteo + Penman-Monteith), daily logging |
 | 2 | ? Complete | Zone coefficient model, daily target vs actual report |
-| 3 | ?? Paused | Twilio SMS (resuming after 4a) — account created, credentials needed |
+| 3 | ?? Paused | Twilio SMS (resuming after 4a) â€” account created, credentials needed |
 | 4a | ?? Active | Attribution infrastructure (schema, config, modules, calibration) |
 | 4b | ? Pending | Scheduling cutover via Hydrawise setzone API |
 | 5 | ? Pending | Observation feedback loop, Kz learning |
@@ -157,7 +157,7 @@ Lenovo (always on)
 
 This is the manually-entered Hydrawise schedule to use until Phase 4b takes control.
 
-### Summer (Apr 15 – Oct 15) — 1,398.6 gal/day
+### Summer (Apr 15 â€“ Oct 15) â€” 1,398.6 gal/day
 
 **Garage Program A (3:00 AM):** Z7 12min, Z8 4min, Z9 15min
 **Garage Program B (5:00 AM):** Z1 5min, Z3 5min, Z4 5min, Z2 5min
@@ -169,8 +169,8 @@ This is the manually-entered Hydrawise schedule to use until Phase 4b takes cont
 
 **Tank minimum:** 780 gal at 9:29 PM (80% usable, 372 gal above pump cutoff)
 
-### Spring (Mar 15 – May 15) — ~1,025 gal/day
-Same timing, sod zones × 0.67 duration, drips unchanged.
+### Spring (Mar 15 â€“ May 15) â€” ~1,025 gal/day
+Same timing, sod zones Ã— 0.67 duration, drips unchanged.
 
 ---
 
@@ -185,8 +185,8 @@ Same timing, sod zones × 0.67 duration, drips unchanged.
 | Reply | Action | Kz Change | Next Check |
 |-------|--------|-----------|------------|
 | GOOD | Log positive | None | 30 days |
-| LOW | Increase water | Kz × 1.15 | 10 days |
-| HIGH | Decrease water | Kz × 0.85 | 10 days |
+| LOW | Increase water | Kz Ã— 1.15 | 10 days |
+| HIGH | Decrease water | Kz Ã— 0.85 | 10 days |
 | SKIP | Defer | None | 7 days |
 
 ### Manual SMS Commands
@@ -223,14 +223,14 @@ Same timing, sod zones × 0.67 duration, drips unchanged.
 
 ## Key Design Decisions
 
-1. **No zone square footage** — ET-to-gallons uses historical summer baseline ÷ summer ET avg instead
-2. **Barn uses duration scaling** — no flow meter, runtime = baseline_minutes × (ET/ET_avg) × Kz
+1. **No zone square footage** â€” ET-to-gallons uses historical summer baseline Ã· summer ET avg instead
+2. **Barn uses duration scaling** â€” no flow meter, runtime = baseline_minutes Ã— (ET/ET_avg) Ã— Kz
 3. **Skip irrigation if:** ET < 0.05 in, forecast rain > 0.25 in, or yesterday rain > 0.5 in
-4. **Temperature threshold:** Don't water when forecast < 68°F (matches current Hydrawise Predictive Watering setting)
-5. **Hydrawise programs suspended** when Phase 4b takes control — system issues setzone commands only
-6. **Conflict detection:** Daily check that Hydrawise programs are still suspended — alert if re-enabled
-7. **sql.js was a failed workaround** for Node 24 — Node was downgraded to 22, better-sqlite3 reinstalled
-8. **Pool Equipment flow attribution (Phase 4a)** — Pool Equipment controller's broken flow meter is worked around by attributing flow to the Garage flow meter. When a Pool zone runs, capped Garage Z5 opens first (providing a gating signal), then the Pool zone opens. The Garage meter's incremental flow is attributed to the Pool zone. This allows accurate GPM measurement and water usage tracking despite the broken Pool Equipment meter. Garage and Pool Equipment share a serialized valve timeline (attribution group). **Garage Z5 is system-critical and must remain capped.**
+4. **Temperature threshold:** Don't water when forecast < 68Â°F (matches current Hydrawise Predictive Watering setting)
+5. **Hydrawise programs suspended** when Phase 4b takes control â€” system issues setzone commands only
+6. **Conflict detection:** Daily check that Hydrawise programs are still suspended â€” alert if re-enabled
+7. **sql.js was a failed workaround** for Node 24 â€” Node was downgraded to 22, better-sqlite3 reinstalled
+8. **Pool Equipment flow attribution (Phase 4a)** â€” Pool Equipment controller's broken flow meter is worked around by attributing flow to the Garage flow meter. When a Pool zone runs, capped Garage Z5 opens first (providing a gating signal), then the Pool zone opens. The Garage meter's incremental flow is attributed to the Pool zone. This allows accurate GPM measurement and water usage tracking despite the broken Pool Equipment meter. Garage and Pool Equipment share a serialized valve timeline (attribution group). **Garage Z5 is system-critical and must remain capped.**
 
 ---
 
@@ -258,9 +258,9 @@ DB_PATH=./irrigation.db
 - [ ] Push irrigation-monitor to GitHub (create repo at github.com/buzzstryker/irrigation-monitor)
 - [ ] Add Twilio Auth Token and phone number to .env (Phase 3)
 - [ ] Create Supabase project, run schema.sql + seed.sql
-- [x] ~~Verify Garage Z5 "Dummy Flow Test"~~ — Z5 capped and designated as attribution gate (Phase 4a)
-- [ ] Walk Garage Z6 Frontyard Drip while running — verify spray vs drip (10.4 GPM is anomalously high for drip)
-- [x] ~~Repair/clean Garage flow meter paddlewheel~~ — meter recently restored and healthy
+- [x] ~~Verify Garage Z5 "Dummy Flow Test"~~ â€” Z5 capped and designated as attribution gate (Phase 4a)
+- [ ] Walk Garage Z6 Frontyard Drip while running â€” verify spray vs drip (10.4 GPM is anomalously high for drip)
+- [x] ~~Repair/clean Garage flow meter paddlewheel~~ â€” meter recently restored and healthy
 - [ ] Capture Barn controller zone relay IDs
 - [ ] Cutover city water from barn location (not house) before spring irrigation
 - [ ] Deploy to Railway for always-on cloud polling (after Phase 3)
@@ -286,4 +286,4 @@ DB_PATH=./irrigation.db
 
 ---
 
-*Last updated: May 2026 — Phases 0, 1, 2 complete. Phase 4a Waves 1-5 complete (schema, config, modules). Phase 3 paused (resuming after 4a). Waves 6-7 pending.*
+*Last updated: May 2026 â€” Phases 0, 1, 2 complete. Phase 4a Waves 1-5 complete (schema, config, modules). Phase 3 paused (resuming after 4a). Waves 6-7 pending.*

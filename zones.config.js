@@ -29,10 +29,10 @@ module.exports = {
       ],
     },
     {
-      id: 1659478,  // Hydrawise controller ID
+      id: 1977673,  // Hydrawise controller ID
       name: 'Loomis Pool Equipment',
-      hasFlowMeter: false,  // Physical flow meter broken
-      flowMeterHealthy: null,  // N/A - no functioning meter
+      hasFlowMeter: true,  // physical meter installed, but...
+      flowMeterHealthy: false,  // ...permanently unreliable; flow attributed via flowMeterAttribution below
       flowMeterAttribution: {
         sourceControllerId: 1659477,  // Numeric Hydrawise controller ID — must match the id field on the GARAGE controller config object. String 'GARAGE' would not match at runtime; poll.js and setzone calls use numeric IDs.
         sourceMeterRelay: null,  // Garage controller's main meter (not zone-specific)
