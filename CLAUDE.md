@@ -53,7 +53,7 @@ Lenovo (always on)
 | Location | Loomis, CA (lat: 38.8024, lon: -121.1964, elevation: 122m) |
 | Tank capacity | 1,725 gal total, 981 gal usable |
 | Pump cutoff | ~408 gal (dry-run sensor) |
-| Ditch fill rate | 4.29 GPM (257 GPH, 24/7) |
+| Ditch fill rate | 5.77 GPM (346 GPH, 24/7) — measured 2026-05 |
 | Ditch water season | April 15 – October 15 |
 | City water season | March 15 – April 14 (BARN LOCATION ONLY) |
 | Off-season | October 16 – March 14 |

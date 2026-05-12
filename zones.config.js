@@ -1,10 +1,10 @@
-/**
- * zones.config.js — Zone inventory for all three Hydrawise controllers
+ï»¿/**
+ * zones.config.js â€” Zone inventory for all three Hydrawise controllers
  *
  * Each controller has a name matching the Hydrawise controller name
  * and a list of zones with relay_id, name, type, and measured GPM.
  *
- * Barn zones are TBD — GPM will be populated after flow meter data is captured.
+ * Barn zones are TBD â€” GPM will be populated after flow meter data is captured.
  */
 
 module.exports = {
@@ -34,7 +34,7 @@ module.exports = {
       hasFlowMeter: true,  // physical meter installed, but...
       flowMeterHealthy: false,  // ...permanently unreliable; flow attributed via flowMeterAttribution below
       flowMeterAttribution: {
-        sourceControllerId: 1659477,  // Numeric Hydrawise controller ID — must match the id field on the GARAGE controller config object. String 'GARAGE' would not match at runtime; poll.js and setzone calls use numeric IDs.
+        sourceControllerId: 1659477,  // Numeric Hydrawise controller ID â€” must match the id field on the GARAGE controller config object. String 'GARAGE' would not match at runtime; poll.js and setzone calls use numeric IDs.
         sourceMeterRelay: null,  // Garage controller's main meter (not zone-specific)
         gatingRelay: 5,  // Garage Z5 relay
         gatingZoneName: 'Garage Z5 (capped dummy)',
@@ -43,7 +43,7 @@ module.exports = {
         reason: 'Pool Equip meter unreliable; Pool zones are downstream of Garage flow meter',
         establishedAt: '2026-05-11',
         degradationBehavior: 'estimate',  // When Garage meter unhealthy, fall back to estimation
-        estimateSource: 'zones.config.js gpm field'  // When meter is unhealthy, estimated mode computes gallons = config_gpm × runtime_min using the GPM field on the zone in zones.config.js. This is NOT pure duration-scaling (which is what the Barn controller does because it has no measured GPMs). Pool Equip zones DO have measured GPMs (after calibration), so estimated mode uses those measurements multiplied by runtime.
+        estimateSource: 'zones.config.js gpm field'  // When meter is unhealthy, estimated mode computes gallons = config_gpm Ã— runtime_min using the GPM field on the zone in zones.config.js. This is NOT pure duration-scaling (which is what the Barn controller does because it has no measured GPMs). Pool Equip zones DO have measured GPMs (after calibration), so estimated mode uses those measurements multiplied by runtime.
       },
       zones: [
         { relay_id: 1, zone_id: 'Z1', name: 'Pool Drip', type: 'drip', gpm: 1.7 },
@@ -77,7 +77,7 @@ module.exports = {
     usable_gal: 981,
     pump_cutoff_gal: 408,
     low_warning_gal: 450,
-    fill_rate_gpm: 4.29,
+    fill_rate_gpm: 5.77,  // 346 GPH, 24/7 â€” measured 2026-05 (5 gal in 52 sec)
   },
 
   /**

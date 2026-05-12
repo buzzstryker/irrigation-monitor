@@ -1,17 +1,17 @@
-# Irrigation Schedule Optimization Report
+﻿# Irrigation Schedule Optimization Report
 ## Loomis, California Property
 
 ---
 
-### PHASE NOTE — Current Implementation
+### PHASE NOTE â€” Current Implementation
 
 > **Phase 1 (current):** The schedule defined in this document is based entirely on historical irrigation practice and measured zone flow data. Zone timing is set manually in the Hydrawise controller and is not being adjusted dynamically by any software. Weather conditions, evapotranspiration rates, and plant/sod observations do not yet influence scheduling. This is the baseline from which a smart scheduling system (Phase 2) will eventually be built.
 
 ---
 
-### CRITICAL OPERATIONAL NOTE — City Water Cutover
+### CRITICAL OPERATIONAL NOTE â€” City Water Cutover
 
-> ⚠️ **IMPORTANT:** During the spring window (March 15 – April 14), when ditch water is unavailable, city water **MUST be sourced from the barn location, NOT from the house.** This ensures the Garage flow meter captures accurate measurement data during city water season. Sourcing from the house bypasses the flow meter entirely and produces no usable data for spring irrigation analysis.
+> âš ï¸ **IMPORTANT:** During the spring window (March 15 â€“ April 14), when ditch water is unavailable, city water **MUST be sourced from the barn location, NOT from the house.** This ensures the Garage flow meter captures accurate measurement data during city water season. Sourcing from the house bypasses the flow meter entirely and produces no usable data for spring irrigation analysis.
 
 ---
 
@@ -19,10 +19,10 @@
 
 | Period | Dates | Water Source | Notes |
 |--------|-------|--------------|-------|
-| Spring irrigation window | Mar 15 – Apr 14 | City water (BARN LOCATION ONLY) | Sod zones at 67% of summer demand |
-| Ditch water season | Apr 15 – Oct 15 | Ditch water → tank (4.29 GPM fill) | Full summer demand |
+| Spring irrigation window | Mar 15 â€“ Apr 14 | City water (BARN LOCATION ONLY) | Sod zones at 67% of summer demand |
+| Ditch water season | Apr 15 â€“ Oct 15 | Ditch water â†’ tank (5.77 GPM fill) | Full summer demand |
 | Transition | May 15 | Switch to full summer schedule | |
-| Off-season | Oct 16 – Mar 14 | No irrigation | |
+| Off-season | Oct 16 â€“ Mar 14 | No irrigation | |
 
 ---
 
@@ -33,14 +33,14 @@
 | Tank capacity | 1,725 gal |
 | Usable capacity | 981 gal |
 | Pump cutoff (dry-run sensor) | ~408 gal |
-| Ditch fill rate | 4.29 GPM (257 GPH) |
+| Ditch fill rate | 5.77 GPM (346 GPH) |
 | Fill availability | 24/7 during ditch season |
 | Controllers | Garage, Pool Equipment |
 | Programs per controller | 3 (A, B, C) |
 
 ---
 
-## Zone Reference — Measured GPM
+## Zone Reference â€” Measured GPM
 
 ### Garage Controller
 
@@ -50,12 +50,12 @@
 | Z2 | Frontyard West Sod | Sod | 14.4 |
 | Z3 | Backyard East Sod | Sod | 10.8 |
 | Z4 | Backyard West Sod | Sod | 7.6 |
-| Z5 | Unused | — | — |
+| Z5 | Unused | â€” | â€” |
 | Z6 | Frontyard Drip | Drip | 10.4 |
 | Z7 | Backyard House Drip | Drip | 2.8 |
 | Z8 | Garden Raised Beds & Trees | Drip | 3.0 |
 | Z9 | Viewshed Hedges East Property Line | Drip | 4.0 |
-| Z10–Z12 | Unused | — | — |
+| Z10â€“Z12 | Unused | â€” | â€” |
 
 ### Pool Equipment Controller
 
@@ -79,33 +79,33 @@
 
 ### Problems with Current Schedule
 - High-demand zones clustered into narrow time windows
-- 7:45–8:35 AM Garage block drains 296 gal in 50 minutes
-- 4:20–4:45 AM Pool Equipment soccer drains 112 gal
+- 7:45â€“8:35 AM Garage block drains 296 gal in 50 minutes
+- 4:20â€“4:45 AM Pool Equipment soccer drains 112 gal
 - Short fragmented sod runs (5 min) lead to evaporation loss before infiltration
 - Tank minimum: 682 gal at 8:35 AM
 
 ### Optimization Principles
 1. Spread sod demand across morning, evening, and night to flatten draw curve
 2. Consolidate short sod runs into longer soakings (better infiltration, less evaporation)
-3. Avoid sod watering 11 AM – 5 PM in summer (peak heat, evaporation loss)
+3. Avoid sod watering 11 AM â€“ 5 PM in summer (peak heat, evaporation loss)
 4. Keep drip zones in stable mid-day slots (low GPM, minimal tank impact)
 5. Use night and early morning hours for heaviest Pool Equipment zones
 6. Fit all zones within three programs per controller with sequential zone scheduling
 
 ---
 
-## Summer Schedule (April 15 – October 15)
+## Summer Schedule (April 15 â€“ October 15)
 
-**Total daily demand: 1,398.6 gal** (exactly matches original — same durations, timing only changed)
+**Total daily demand: 1,398.6 gal** (exactly matches original â€” same durations, timing only changed)
 **Tank minimum: 780 gal at 9:29 PM** (80% of usable capacity)
 **Safety margin above pump cutoff (408 gal): 372 gal**
 **Pump risk: None**
 
-> ℹ️ Zone durations are identical to the original schedule. Only the start times have been redistributed to spread demand across the day and keep the tank as full as possible.
+> â„¹ï¸ Zone durations are identical to the original schedule. Only the start times have been redistributed to spread demand across the day and keep the tank as full as possible.
 
 ### GARAGE CONTROLLER
 
-**Program A — Early Morning Drips (Start: 3:00 AM)**
+**Program A â€” Early Morning Drips (Start: 3:00 AM)**
 *Low-flow zones first, minimal tank impact, tank at full*
 
 | Seq | Zone | Name | Start | Duration | GPM | Gallons |
@@ -115,7 +115,7 @@
 | 3 | Z9 | Viewshed Hedges | 3:16 AM | 15 min | 4.0 | 60.0 |
 | | | **Subtotal** | | **31 min** | | **105.6 gal** |
 
-**Program B — Morning Sod (Start: 5:00 AM)**
+**Program B â€” Morning Sod (Start: 5:00 AM)**
 *Cool temps, good infiltration, tank recovers all day*
 
 | Seq | Zone | Name | Start | Duration | GPM | Gallons |
@@ -126,7 +126,7 @@
 | 4 | Z2 | Frontyard West Sod | 5:15 AM | 5 min | 14.4 | 72.0 |
 | | | **Subtotal** | | **20 min** | | **203.0 gal** |
 
-**Program C — Evening Drip (Start: 6:00 PM)**
+**Program C â€” Evening Drip (Start: 6:00 PM)**
 *Moved out of morning to eliminate the biggest single drain event from AM hours*
 
 | Seq | Zone | Name | Start | Duration | GPM | Gallons |
@@ -140,7 +140,7 @@
 
 ### POOL EQUIPMENT CONTROLLER
 
-**Program A — Night Soccer Sod (Start: 11:00 PM)**
+**Program A â€” Night Soccer Sod (Start: 11:00 PM)**
 *Tank full going into this block, recovers overnight*
 
 | Seq | Zone | Name | Start | Duration | GPM | Gallons |
@@ -152,7 +152,7 @@
 | 5 | Z6 | Soccer East North2 | 11:20 PM | 5 min | 7.0 | 35.0 |
 | | | **Subtotal** | | **25 min** | | **228.5 gal** |
 
-**Program B — Early Morning Drip + Trees (Start: 1:00 AM)**
+**Program B â€” Early Morning Drip + Trees (Start: 1:00 AM)**
 *Tank recovering from soccer block, drip first to let it build back up*
 
 | Seq | Zone | Name | Start | Duration | GPM | Gallons |
@@ -162,7 +162,7 @@
 | 3 | Z8 | East Trees North | 1:27 AM | 7 min | 16.0 | 112.0 |
 | | | **Subtotal** | | **34 min** | | **219.5 gal** |
 
-**Program C — Late Night West Trees (Start: 9:00 PM)**
+**Program C â€” Late Night West Trees (Start: 9:00 PM)**
 *Separated from soccer block by 2 hours so tank can partially recover between events*
 
 | Seq | Zone | Name | Start | Duration | GPM | Gallons |
@@ -176,7 +176,7 @@
 
 ---
 
-**Summer Grand Total: 1,398.6 gal/day ✓ (matches original exactly)**
+**Summer Grand Total: 1,398.6 gal/day âœ“ (matches original exactly)**
 
 ### Tank Level Profile (Summer)
 
@@ -187,17 +187,17 @@
 | 1:27 AM | 860 gal (88%) | After East Trees |
 | 5:00 AM | 981 gal (100%) | Recovered to full |
 | 5:20 AM | 868 gal (89%) | After Garage sod |
-| 6:00 AM–6:00 PM | 981 gal (100%) | Fully recovered, holds all day |
+| 6:00 AMâ€“6:00 PM | 981 gal (100%) | Fully recovered, holds all day |
 | 6:30 PM | 802 gal (82%) | After Frontyard Drip |
 | 7:00 PM | 981 gal (100%) | Recovered to full |
-| 9:30 PM | 780 gal (80%) | **Daily minimum — after West Trees** |
+| 9:30 PM | 780 gal (80%) | **Daily minimum â€” after West Trees** |
 | 10:00 PM | 981 gal (100%) | Recovered to full |
 | 11:25 PM | 864 gal (88%) | After Soccer block |
 | Midnight | ~950 gal | Still recovering |
 
 ---
 
-## Spring Schedule (March 15 – May 15)
+## Spring Schedule (March 15 â€“ May 15)
 
 **Drip zones:** Unchanged from summer (same durations)
 **Sod zones:** 67% of summer duration
@@ -206,7 +206,7 @@
 
 ### GARAGE CONTROLLER
 
-**Program A — Early Morning Drips (Start: 3:00 AM)**
+**Program A â€” Early Morning Drips (Start: 3:00 AM)**
 *(Identical to summer)*
 
 | Seq | Zone | Name | Duration | GPM | Gallons |
@@ -216,8 +216,8 @@
 | 3 | Z9 | Viewshed Hedges | 15 min | 4.0 | 60.0 |
 | | | **Subtotal** | **31 min** | | **105.6 gal** |
 
-**Program B — Morning Sod (Start: 5:00 AM)**
-*(Sod durations × 0.67, rounded to nearest minute)*
+**Program B â€” Morning Sod (Start: 5:00 AM)**
+*(Sod durations Ã— 0.67, rounded to nearest minute)*
 
 | Seq | Zone | Name | Duration | GPM | Gallons |
 |-----|------|------|----------|-----|---------|
@@ -227,7 +227,7 @@
 | 4 | Z2 | Frontyard West Sod | 3 min | 14.4 | 43.2 |
 | | | **Subtotal** | **12 min** | | **121.8 gal** |
 
-**Program C — Evening Drip (Start: 6:00 PM)**
+**Program C â€” Evening Drip (Start: 6:00 PM)**
 *(Identical to summer)*
 
 | Seq | Zone | Name | Duration | GPM | Gallons |
@@ -241,8 +241,8 @@
 
 ### POOL EQUIPMENT CONTROLLER
 
-**Program A — Night Soccer Sod (Start: 11:00 PM)**
-*(Sod durations × 0.67)*
+**Program A â€” Night Soccer Sod (Start: 11:00 PM)**
+*(Sod durations Ã— 0.67)*
 
 | Seq | Zone | Name | Duration | GPM | Gallons |
 |-----|------|------|----------|-----|---------|
@@ -253,8 +253,8 @@
 | 5 | Z6 | Soccer East North2 | 3 min | 7.0 | 21.0 |
 | | | **Subtotal** | **15 min** | | **137.1 gal** |
 
-**Program B — Early Morning Drip + Trees (Start: 1:00 AM)**
-*(Drip unchanged, sod × 0.67)*
+**Program B â€” Early Morning Drip + Trees (Start: 1:00 AM)**
+*(Drip unchanged, sod Ã— 0.67)*
 
 | Seq | Zone | Name | Duration | GPM | Gallons |
 |-----|------|------|----------|-----|---------|
@@ -263,8 +263,8 @@
 | 3 | Z8 | East Trees North | 5 min | 16.0 | 80.0 |
 | | | **Subtotal** | **30 min** | | **166.5 gal** |
 
-**Program C — Late Night West Trees (Start: 9:00 PM)**
-*(Sod durations × 0.67)*
+**Program C â€” Late Night West Trees (Start: 9:00 PM)**
+*(Sod durations Ã— 0.67)*
 
 | Seq | Zone | Name | Duration | GPM | Gallons |
 |-----|------|------|----------|-----|---------|
@@ -284,13 +284,13 @@
 ## To Do Before Implementing
 
 - [ ] Cutover city water from barn location (not house) before spring irrigation begins
-- [ ] Repair/clean Garage flow meter paddlewheel — currently intermittent on sod zones
-- [ ] Walk Garage Z6 Frontyard Drip while running — confirm zone type (spray vs drip) and verify 10.4 GPM
-- [ ] Walk Garage Z2 Frontyard West Sod while running — 14.4 GPM unusually high, verify head count
+- [ ] Repair/clean Garage flow meter paddlewheel â€” currently intermittent on sod zones
+- [ ] Walk Garage Z6 Frontyard Drip while running â€” confirm zone type (spray vs drip) and verify 10.4 GPM
+- [ ] Walk Garage Z2 Frontyard West Sod while running â€” 14.4 GPM unusually high, verify head count
 - [ ] Capture Barn controller zone data (GPM and current schedule screenshots)
 - [ ] Test new schedule on Pool Equipment controller first (flow meter working, easier to verify)
 - [ ] Monitor tank level daily for first two weeks after schedule change
-- [ ] Log minimum daily tank level — target no lower than 750 gal in summer
+- [ ] Log minimum daily tank level â€” target no lower than 750 gal in summer
 
 ---
 
