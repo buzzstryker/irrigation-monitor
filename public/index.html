@@ -7,6 +7,7 @@
 
   <!-- Chart.js from CDN (pinned version) -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
 
   <style>
     /* CSS Reset and Base Styles */
@@ -242,6 +243,23 @@
       font-style: italic;
     }
 
+    /* Error Banner */
+    .error-banner {
+      display: none;
+      margin: 0;
+      padding: 16px 32px;
+      background: #fadbd8;
+      border-left: 4px solid #e74c3c;
+      border-bottom: 1px solid #ecf0f1;
+      color: #c0392b;
+      font-size: 14px;
+      font-weight: 500;
+    }
+
+    .error-banner.visible {
+      display: block;
+    }
+
     /* Footer */
     footer {
       padding: 20px 32px;
@@ -299,6 +317,9 @@
         <div class="health-detail" id="tankDetail">—</div>
       </div>
     </div>
+
+    <!-- Error Banner (hidden by default) -->
+    <div id="errorBanner" class="error-banner"></div>
 
     <!-- Tank Level Section -->
     <section>
@@ -387,6 +408,11 @@
       const refreshBtn = document.getElementById('refreshBtn');
       refreshBtn.disabled = true;
 
+      // Clear any previous error
+      const errorBanner = document.getElementById('errorBanner');
+      errorBanner.className = 'error-banner';
+      errorBanner.textContent = '';
+
       try {
         // Fetch all three endpoints in parallel
         const [healthRes, eventsRes, tankRes] = await Promise.all([
@@ -407,8 +433,10 @@
         renderTankChart(tank);
         renderEventsTable(events);
       } catch (err) {
-        console.error('Dashboard load error:', err);
-        alert('Failed to load dashboard data. Check console for details.');
+        console.error('[dashboard] loadDashboard failed:', err);
+        const errorBanner = document.getElementById('errorBanner');
+        errorBanner.textContent = 'Dashboard error: ' + err.message;
+        errorBanner.className = 'error-banner visible';
       } finally {
         refreshBtn.disabled = false;
       }
