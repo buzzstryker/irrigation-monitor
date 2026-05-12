@@ -8,6 +8,7 @@
 require('dotenv').config();
 
 const express = require('express');
+const path = require('path');
 const bodyParser = require('body-parser');
 const { getDb } = require('./db');
 const { handleInboundSMS } = require('./sms/handler');
@@ -23,6 +24,9 @@ const PORT = process.env.PORT || 3001;
 app.use(bodyParser.urlencoded({ extended: false }));
 // Parse JSON bodies (web app and sensor data)
 app.use(bodyParser.json());
+
+// Static assets for the local operator dashboard (see public/index.html)
+app.use(express.static(path.join(__dirname, 'public')));
 
 // ──────────────────────────────────────────────
 // Health check
@@ -87,6 +91,175 @@ app.get('/api/status', (req, res) => {
     });
   } catch (err) {
     console.error('[API] /api/status error:', err.message);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// ──────────────────────────────────────────────
+// Dashboard API endpoints
+// ──────────────────────────────────────────────
+
+app.get('/api/dashboard/health', (req, res) => {
+  try {
+    const db = getDb();
+    const now = Math.floor(Date.now() / 1000);
+
+    // Last poll: most recent tank_level_log entry (poll.js writes every 60s)
+    const lastPollRow = db.prepare(
+      'SELECT timestamp FROM tank_level_log ORDER BY id DESC LIMIT 1'
+    ).get();
+
+    const lastPoll = lastPollRow ? {
+      timestamp: new Date(lastPollRow.timestamp * 1000).toISOString(),
+      secondsAgo: now - lastPollRow.timestamp
+    } : null;
+
+    // Last watering event: most recent watering_events entry
+    const lastEventRow = db.prepare(
+      'SELECT timestamp, controller, zone_id FROM watering_events ORDER BY id DESC LIMIT 1'
+    ).get();
+
+    let lastWateringEvent = null;
+    if (lastEventRow) {
+      // Load zones.config.js to resolve zone name
+      const { controllers } = require('./zones.config.js');
+      const controller = controllers.find(c => c.name === lastEventRow.controller);
+      const zone = controller ? controller.zones.find(z => z.zone_id === lastEventRow.zone_id) : null;
+      const zoneName = zone ? zone.name : 'Unknown zone';
+
+      lastWateringEvent = {
+        timestamp: new Date(lastEventRow.timestamp * 1000).toISOString(),
+        secondsAgo: now - lastEventRow.timestamp,
+        zone: `${lastEventRow.controller} ${lastEventRow.zone_id} (${zoneName})`
+      };
+    }
+
+    // Last tank reading: same as lastPoll but include level
+    const lastTankRow = db.prepare(
+      'SELECT timestamp, level_gallons FROM tank_level_log ORDER BY id DESC LIMIT 1'
+    ).get();
+
+    const lastTankReading = lastTankRow ? {
+      timestamp: new Date(lastTankRow.timestamp * 1000).toISOString(),
+      secondsAgo: now - lastTankRow.timestamp,
+      level_gallons: lastTankRow.level_gallons
+    } : null;
+
+    // Health flags
+    const pollHealthy = lastPoll ? lastPoll.secondsAgo < 90 : false;
+    const dbReachable = true; // if we got here, db is reachable
+
+    res.json({
+      lastPoll,
+      lastWateringEvent,
+      lastTankReading,
+      pollHealthy,
+      dbReachable
+    });
+  } catch (err) {
+    console.error('[API] /api/dashboard/health error:', err.message);
+    res.status(500).json({
+      error: 'Internal server error',
+      dbReachable: false
+    });
+  }
+});
+
+app.get('/api/dashboard/events', (req, res) => {
+  try {
+    const db = getDb();
+    const days = Math.max(1, Math.min(30, parseInt(req.query.days, 10) || 7));
+    const now = Math.floor(Date.now() / 1000);
+    const rangeStart = now - (days * 86400);
+
+    // Load zones.config.js once and build a lookup map
+    const { controllers } = require('./zones.config.js');
+    const zoneMap = new Map();
+    for (const ctrl of controllers) {
+      for (const z of ctrl.zones) {
+        const key = `${ctrl.name}:${z.zone_id}`;
+        zoneMap.set(key, z);
+      }
+    }
+
+    // Query watering_events
+    const rows = db.prepare(
+      `SELECT timestamp, controller, zone_id, relay_id, duration_seconds, gallons,
+              flow_gpm, flow_source, flow_source_controller_id, flow_quality
+       FROM watering_events
+       WHERE timestamp >= ?
+       ORDER BY timestamp DESC`
+    ).all(rangeStart);
+
+    const events = rows.map(row => {
+      const key = `${row.controller}:${row.zone_id}`;
+      const zone = zoneMap.get(key);
+
+      return {
+        timestamp: new Date(row.timestamp * 1000).toISOString(),
+        controller: row.controller,
+        zoneId: row.zone_id,
+        zoneName: zone ? zone.name : null,
+        zoneType: zone ? zone.type : null,
+        relayId: row.relay_id,
+        durationSeconds: row.duration_seconds,
+        gallons: row.gallons,
+        configuredGpm: zone ? zone.gpm : null,
+        measuredFlowGpm: row.flow_gpm,
+        flowQuality: row.flow_quality || 'unknown',
+        flowSource: row.flow_source || 'unknown'
+      };
+    });
+
+    res.json({
+      events,
+      rangeStart: new Date(rangeStart * 1000).toISOString(),
+      rangeEnd: new Date(now * 1000).toISOString(),
+      count: events.length
+    });
+  } catch (err) {
+    console.error('[API] /api/dashboard/events error:', err.message);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+app.get('/api/dashboard/tank', (req, res) => {
+  try {
+    const db = getDb();
+    const hours = Math.max(1, Math.min(168, parseInt(req.query.hours, 10) || 24));
+    const now = Math.floor(Date.now() / 1000);
+    const rangeStart = now - (hours * 3600);
+
+    // Query tank_level_log
+    const rows = db.prepare(
+      `SELECT timestamp, level_gallons, source
+       FROM tank_level_log
+       WHERE timestamp >= ?
+       ORDER BY timestamp ASC`
+    ).all(rangeStart);
+
+    const readings = rows.map(row => ({
+      timestamp: new Date(row.timestamp * 1000).toISOString(),
+      level_gallons: row.level_gallons,
+      source: row.source
+    }));
+
+    // Thresholds from zones.config.js
+    const { tank } = require('./zones.config.js');
+
+    res.json({
+      readings,
+      rangeStart: new Date(rangeStart * 1000).toISOString(),
+      rangeEnd: new Date(now * 1000).toISOString(),
+      count: readings.length,
+      thresholds: {
+        maxUsable: tank.usable_gal,
+        safetyFloor: tank.low_warning_gal,
+        pumpCutoff: tank.pump_cutoff_gal
+      }
+    });
+  } catch (err) {
+    console.error('[API] /api/dashboard/tank error:', err.message);
     res.status(500).json({ error: 'Internal server error' });
   }
 });

@@ -1,0 +1,619 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>irrigation-monitor — local operator dashboard</title>
+
+  <!-- Chart.js from CDN (pinned version) -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.js"></script>
+
+  <style>
+    /* CSS Reset and Base Styles */
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', sans-serif;
+      background: #f5f5f5;
+      color: #333;
+      line-height: 1.6;
+      padding: 20px;
+    }
+
+    .container {
+      max-width: 1100px;
+      margin: 0 auto;
+      background: white;
+      border-radius: 8px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+      overflow: hidden;
+    }
+
+    /* Header */
+    header {
+      background: #2c3e50;
+      color: white;
+      padding: 24px 32px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-bottom: 4px solid #3498db;
+    }
+
+    header h1 {
+      font-size: 24px;
+      font-weight: 600;
+    }
+
+    .header-meta {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      font-size: 14px;
+      color: #bdc3c7;
+    }
+
+    #lastUpdated {
+      font-weight: 500;
+    }
+
+    button {
+      background: #3498db;
+      color: white;
+      border: none;
+      padding: 8px 16px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 14px;
+      font-weight: 500;
+      transition: background 0.2s;
+    }
+
+    button:hover:not(:disabled) {
+      background: #2980b9;
+    }
+
+    button:disabled {
+      background: #95a5a6;
+      cursor: not-allowed;
+    }
+
+    /* Service Health Strip */
+    .health-strip {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 16px;
+      padding: 24px 32px;
+      border-bottom: 1px solid #ecf0f1;
+    }
+
+    .health-box {
+      border: 2px solid #ecf0f1;
+      border-radius: 6px;
+      padding: 16px;
+      transition: border-color 0.3s;
+    }
+
+    .health-box.green {
+      border-color: #27ae60;
+      background: #eafaf1;
+    }
+
+    .health-box.yellow {
+      border-color: #f39c12;
+      background: #fef5e7;
+    }
+
+    .health-box.red {
+      border-color: #e74c3c;
+      background: #fadbd8;
+    }
+
+    .health-box.gray {
+      border-color: #95a5a6;
+      background: #ecf0f1;
+    }
+
+    .health-box h3 {
+      font-size: 12px;
+      text-transform: uppercase;
+      color: #7f8c8d;
+      margin-bottom: 8px;
+      font-weight: 600;
+      letter-spacing: 0.5px;
+    }
+
+    .health-value {
+      font-size: 18px;
+      font-weight: 600;
+      color: #2c3e50;
+      margin-bottom: 4px;
+    }
+
+    .health-detail {
+      font-size: 13px;
+      color: #7f8c8d;
+    }
+
+    /* Section Styles */
+    section {
+      padding: 24px 32px;
+      border-bottom: 1px solid #ecf0f1;
+    }
+
+    section:last-of-type {
+      border-bottom: none;
+    }
+
+    section h2 {
+      font-size: 20px;
+      font-weight: 600;
+      color: #2c3e50;
+      margin-bottom: 16px;
+    }
+
+    /* Tank Level Section */
+    #tankChart {
+      max-height: 400px;
+      margin-bottom: 16px;
+    }
+
+    .tank-current {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      padding: 16px;
+      background: #ecf0f1;
+      border-radius: 6px;
+      margin-top: 16px;
+    }
+
+    .tank-current-label {
+      font-size: 14px;
+      color: #7f8c8d;
+      font-weight: 500;
+    }
+
+    .tank-current-value {
+      font-size: 32px;
+      font-weight: 700;
+      color: #2c3e50;
+    }
+
+    .tank-indicator {
+      width: 20px;
+      height: 20px;
+      border-radius: 50%;
+      margin-left: 8px;
+    }
+
+    .tank-indicator.green { background: #27ae60; }
+    .tank-indicator.yellow { background: #f39c12; }
+    .tank-indicator.red { background: #e74c3c; }
+
+    /* Events Table */
+    .table-wrapper {
+      overflow-x: auto;
+      border: 1px solid #ecf0f1;
+      border-radius: 6px;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 14px;
+    }
+
+    thead {
+      background: #34495e;
+      color: white;
+      position: sticky;
+      top: 0;
+    }
+
+    th {
+      padding: 12px 8px;
+      text-align: left;
+      font-weight: 600;
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    td {
+      padding: 10px 8px;
+      border-bottom: 1px solid #ecf0f1;
+    }
+
+    tbody tr:nth-child(even) {
+      background: #f8f9fa;
+    }
+
+    tbody tr:hover {
+      background: #e8f4f8;
+    }
+
+    .null-value {
+      color: #95a5a6;
+      font-style: italic;
+    }
+
+    /* Footer */
+    footer {
+      padding: 20px 32px;
+      background: #ecf0f1;
+      font-size: 13px;
+      color: #7f8c8d;
+      text-align: center;
+    }
+
+    footer a {
+      color: #3498db;
+      text-decoration: none;
+    }
+
+    footer a:hover {
+      text-decoration: underline;
+    }
+
+    .footer-links {
+      margin-top: 8px;
+      display: flex;
+      justify-content: center;
+      gap: 16px;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <!-- Header -->
+    <header>
+      <h1>irrigation-monitor</h1>
+      <div class="header-meta">
+        <span id="lastUpdated">—</span>
+        <button id="refreshBtn" onclick="loadDashboard()">Refresh</button>
+      </div>
+    </header>
+
+    <!-- Service Health Strip -->
+    <div class="health-strip">
+      <div class="health-box gray" id="healthPoll">
+        <h3>Last Poll</h3>
+        <div class="health-value" id="pollValue">—</div>
+        <div class="health-detail" id="pollDetail">—</div>
+      </div>
+
+      <div class="health-box gray" id="healthEvent">
+        <h3>Last Watering</h3>
+        <div class="health-value" id="eventValue">—</div>
+        <div class="health-detail" id="eventDetail">—</div>
+      </div>
+
+      <div class="health-box gray" id="healthTank">
+        <h3>Tank Level</h3>
+        <div class="health-value" id="tankValue">—</div>
+        <div class="health-detail" id="tankDetail">—</div>
+      </div>
+    </div>
+
+    <!-- Tank Level Section -->
+    <section>
+      <h2>Tank level — last 24 hours</h2>
+      <canvas id="tankChart"></canvas>
+      <div class="tank-current">
+        <span class="tank-current-label">Current level:</span>
+        <span class="tank-current-value" id="currentLevel">—</span>
+        <span class="tank-indicator" id="tankIndicator"></span>
+      </div>
+    </section>
+
+    <!-- Recent Activity Section -->
+    <section>
+      <h2>Recent watering events — last 7 days</h2>
+      <div class="table-wrapper">
+        <table>
+          <thead>
+            <tr>
+              <th>When</th>
+              <th>Controller</th>
+              <th>Zone</th>
+              <th>Duration</th>
+              <th>Gallons</th>
+              <th>Config GPM</th>
+              <th>Measured GPM</th>
+              <th>Flow Source</th>
+              <th>Flow Quality</th>
+            </tr>
+          </thead>
+          <tbody id="eventsTableBody">
+            <tr><td colspan="9" style="text-align: center; padding: 24px;">Loading...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- Footer -->
+    <footer>
+      <div>Live from local SQLite database via Express server on port 3001</div>
+      <div>v1.0 — 2026-05-12</div>
+      <div class="footer-links">
+        <a href="/api/dashboard/health" target="_blank">View /health JSON</a>
+        <a href="/api/dashboard/events?days=7" target="_blank">View /events JSON</a>
+        <a href="/api/dashboard/tank?hours=24" target="_blank">View /tank JSON</a>
+      </div>
+    </footer>
+  </div>
+
+  <script>
+    let tankChart = null;
+
+    // Relative time helper
+    function relativeTime(secondsAgo) {
+      if (secondsAgo < 60) return `${Math.floor(secondsAgo)}s ago`;
+      if (secondsAgo < 3600) return `${Math.floor(secondsAgo / 60)}m ago`;
+      if (secondsAgo < 86400) return `${Math.floor(secondsAgo / 3600)}h ago`;
+      return `${Math.floor(secondsAgo / 86400)}d ago`;
+    }
+
+    // Format absolute time
+    function absoluteTime(isoString) {
+      const d = new Date(isoString);
+      return d.toLocaleString('en-US', {
+        month: 'short',
+        day: 'numeric',
+        hour: 'numeric',
+        minute: '2-digit',
+        hour12: true
+      });
+    }
+
+    // Format duration in seconds
+    function formatDuration(seconds) {
+      if (seconds < 60) return `${seconds}s`;
+      const mins = Math.floor(seconds / 60);
+      const secs = seconds % 60;
+      return secs > 0 ? `${mins}m ${secs}s` : `${mins}m`;
+    }
+
+    // Main dashboard load function
+    async function loadDashboard() {
+      const refreshBtn = document.getElementById('refreshBtn');
+      refreshBtn.disabled = true;
+
+      try {
+        // Fetch all three endpoints in parallel
+        const [healthRes, eventsRes, tankRes] = await Promise.all([
+          fetch('/api/dashboard/health'),
+          fetch('/api/dashboard/events?days=7'),
+          fetch('/api/dashboard/tank?hours=24')
+        ]);
+
+        const health = await healthRes.json();
+        const events = await eventsRes.json();
+        const tank = await tankRes.json();
+
+        // Update last-updated timestamp
+        document.getElementById('lastUpdated').textContent = new Date().toLocaleTimeString();
+
+        // Render each section
+        renderHealthStrip(health);
+        renderTankChart(tank);
+        renderEventsTable(events);
+      } catch (err) {
+        console.error('Dashboard load error:', err);
+        alert('Failed to load dashboard data. Check console for details.');
+      } finally {
+        refreshBtn.disabled = false;
+      }
+    }
+
+    // Render service health strip
+    function renderHealthStrip(data) {
+      const pollBox = document.getElementById('healthPoll');
+      const eventBox = document.getElementById('healthEvent');
+      const tankBox = document.getElementById('healthTank');
+
+      // Last poll
+      if (data.lastPoll) {
+        const color = data.lastPoll.secondsAgo < 90 ? 'green' :
+                      data.lastPoll.secondsAgo < 180 ? 'yellow' : 'red';
+        pollBox.className = `health-box ${color}`;
+        document.getElementById('pollValue').textContent = relativeTime(data.lastPoll.secondsAgo);
+        document.getElementById('pollDetail').textContent = absoluteTime(data.lastPoll.timestamp);
+      } else {
+        pollBox.className = 'health-box gray';
+        document.getElementById('pollValue').textContent = '(no data)';
+        document.getElementById('pollDetail').textContent = '—';
+      }
+
+      // Last watering event
+      if (data.lastWateringEvent) {
+        const color = data.lastWateringEvent.secondsAgo < 86400 ? 'green' :
+                      data.lastWateringEvent.secondsAgo < 172800 ? 'yellow' : 'red';
+        eventBox.className = `health-box ${color}`;
+        document.getElementById('eventValue').textContent = relativeTime(data.lastWateringEvent.secondsAgo);
+        document.getElementById('eventDetail').textContent = data.lastWateringEvent.zone;
+      } else {
+        eventBox.className = 'health-box gray';
+        document.getElementById('eventValue').textContent = '(no data)';
+        document.getElementById('eventDetail').textContent = '—';
+      }
+
+      // Last tank reading
+      if (data.lastTankReading) {
+        const gal = data.lastTankReading.level_gallons;
+        const color = gal > 450 ? 'green' : gal > 408 ? 'yellow' : 'red';
+        tankBox.className = `health-box ${color}`;
+        document.getElementById('tankValue').textContent = `${Math.round(gal)} gal`;
+        document.getElementById('tankDetail').textContent = relativeTime(data.lastTankReading.secondsAgo);
+      } else {
+        tankBox.className = 'health-box gray';
+        document.getElementById('tankValue').textContent = '(no data)';
+        document.getElementById('tankDetail').textContent = '—';
+      }
+    }
+
+    // Render tank level chart
+    function renderTankChart(data) {
+      const canvas = document.getElementById('tankChart');
+      const ctx = canvas.getContext('2d');
+
+      // Destroy existing chart if present
+      if (tankChart) {
+        tankChart.destroy();
+      }
+
+      // Prepare data
+      const labels = data.readings.map(r => new Date(r.timestamp));
+      const levels = data.readings.map(r => r.level_gallons);
+
+      // Current level for the indicator
+      const currentLevel = data.readings.length > 0
+        ? data.readings[data.readings.length - 1].level_gallons
+        : null;
+
+      if (currentLevel !== null) {
+        document.getElementById('currentLevel').textContent = `${Math.round(currentLevel)} gal`;
+        const indicator = document.getElementById('tankIndicator');
+        if (currentLevel > 450) {
+          indicator.className = 'tank-indicator green';
+        } else if (currentLevel > 408) {
+          indicator.className = 'tank-indicator yellow';
+        } else {
+          indicator.className = 'tank-indicator red';
+        }
+      } else {
+        document.getElementById('currentLevel').textContent = '(no data)';
+        document.getElementById('tankIndicator').className = 'tank-indicator';
+      }
+
+      // Create chart
+      tankChart = new Chart(ctx, {
+        type: 'line',
+        data: {
+          labels: labels,
+          datasets: [
+            {
+              label: 'Tank Level',
+              data: levels,
+              borderColor: '#3498db',
+              backgroundColor: 'rgba(52, 152, 219, 0.1)',
+              borderWidth: 2,
+              pointRadius: 0,
+              tension: 0.1
+            },
+            // Max usable line
+            {
+              label: 'Max Usable (981 gal)',
+              data: new Array(levels.length).fill(data.thresholds.maxUsable),
+              borderColor: '#27ae60',
+              borderWidth: 2,
+              borderDash: [5, 5],
+              pointRadius: 0,
+              fill: false
+            },
+            // Safety floor line
+            {
+              label: 'Safety Floor (450 gal)',
+              data: new Array(levels.length).fill(data.thresholds.safetyFloor),
+              borderColor: '#f39c12',
+              borderWidth: 2,
+              borderDash: [5, 5],
+              pointRadius: 0,
+              fill: false
+            },
+            // Pump cutoff line
+            {
+              label: 'Pump Cutoff (408 gal)',
+              data: new Array(levels.length).fill(data.thresholds.pumpCutoff),
+              borderColor: '#e74c3c',
+              borderWidth: 2,
+              borderDash: [5, 5],
+              pointRadius: 0,
+              fill: false
+            }
+          ]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: true,
+          aspectRatio: 2.5,
+          plugins: {
+            legend: {
+              display: true,
+              position: 'bottom'
+            },
+            tooltip: {
+              mode: 'index',
+              intersect: false
+            }
+          },
+          scales: {
+            x: {
+              type: 'time',
+              time: {
+                unit: 'hour',
+                displayFormats: {
+                  hour: 'h:mm a'
+                }
+              },
+              title: {
+                display: true,
+                text: 'Time'
+              }
+            },
+            y: {
+              title: {
+                display: true,
+                text: 'Gallons'
+              },
+              suggestedMin: 0,
+              suggestedMax: 1100
+            }
+          }
+        }
+      });
+    }
+
+    // Render events table
+    function renderEventsTable(data) {
+      const tbody = document.getElementById('eventsTableBody');
+
+      if (data.events.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="9" style="text-align: center; padding: 24px;">No watering events in the last 7 days</td></tr>';
+        return;
+      }
+
+      const rows = data.events.map(e => {
+        const when = `${relativeTime((Date.now() - new Date(e.timestamp)) / 1000)}<br><small>${absoluteTime(e.timestamp)}</small>`;
+        const zoneName = e.zoneName || '<span class="null-value">(unknown)</span>';
+        const configGpm = e.configuredGpm !== null ? e.configuredGpm.toFixed(1) : '<span class="null-value">—</span>';
+        const measuredGpm = e.measuredFlowGpm !== null ? e.measuredFlowGpm.toFixed(1) : '<span class="null-value">—</span>';
+
+        return `
+          <tr>
+            <td>${when}</td>
+            <td>${e.controller}</td>
+            <td>${e.zoneId} (${zoneName})</td>
+            <td>${formatDuration(e.durationSeconds)}</td>
+            <td>${e.gallons ? e.gallons.toFixed(1) : '<span class="null-value">—</span>'}</td>
+            <td>${configGpm}</td>
+            <td>${measuredGpm}</td>
+            <td>${e.flowSource}</td>
+            <td>${e.flowQuality}</td>
+          </tr>
+        `;
+      }).join('');
+
+      tbody.innerHTML = rows;
+    }
+
+    // Load dashboard on page load
+    loadDashboard();
+  </script>
+</body>
+</html>
