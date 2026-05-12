@@ -134,12 +134,12 @@ app.get('/api/dashboard/health', (req, res) => {
       };
     }
 
-    // Last tank reading: same as lastPoll but include level
+    // Last tank level: same as lastPoll but include level
     const lastTankRow = db.prepare(
       'SELECT timestamp, level_gallons FROM tank_level_log ORDER BY id DESC LIMIT 1'
     ).get();
 
-    const lastTankReading = lastTankRow ? {
+    const lastTankLevel = lastTankRow ? {
       timestamp: new Date(lastTankRow.timestamp * 1000).toISOString(),
       secondsAgo: now - lastTankRow.timestamp,
       level_gallons: lastTankRow.level_gallons
@@ -152,7 +152,7 @@ app.get('/api/dashboard/health', (req, res) => {
     res.json({
       lastPoll,
       lastWateringEvent,
-      lastTankReading,
+      lastTankLevel,
       pollHealthy,
       dbReachable
     });
@@ -238,7 +238,7 @@ app.get('/api/dashboard/tank', (req, res) => {
        ORDER BY timestamp ASC`
     ).all(rangeStart);
 
-    const readings = rows.map(row => ({
+    const estimates = rows.map(row => ({
       timestamp: new Date(row.timestamp * 1000).toISOString(),
       level_gallons: row.level_gallons,
       source: row.source
@@ -248,10 +248,10 @@ app.get('/api/dashboard/tank', (req, res) => {
     const { tank } = require('./zones.config.js');
 
     res.json({
-      readings,
+      estimates,
       rangeStart: new Date(rangeStart * 1000).toISOString(),
       rangeEnd: new Date(now * 1000).toISOString(),
-      count: readings.length,
+      count: estimates.length,
       thresholds: {
         maxUsable: tank.usable_gal,
         safetyFloor: tank.low_warning_gal,

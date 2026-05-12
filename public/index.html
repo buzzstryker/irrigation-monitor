@@ -302,13 +302,16 @@
 
     <!-- Tank Level Section -->
     <section>
-      <h2>Tank level — last 24 hours</h2>
+      <h2>Tank level estimates — last 24 hours</h2>
       <canvas id="tankChart"></canvas>
       <div class="tank-current">
         <span class="tank-current-label">Current level:</span>
         <span class="tank-current-value" id="currentLevel">—</span>
         <span class="tank-indicator" id="tankIndicator"></span>
       </div>
+      <p style="margin-top: 12px; font-size: 13px; color: #7f8c8d; font-style: italic;">
+        Levels are calculated from polled flow data, not measured directly. Phase 7 (ESP32 sensor) will add real readings.
+      </p>
     </section>
 
     <!-- Recent Activity Section -->
@@ -443,13 +446,13 @@
         document.getElementById('eventDetail').textContent = '—';
       }
 
-      // Last tank reading
-      if (data.lastTankReading) {
-        const gal = data.lastTankReading.level_gallons;
+      // Last tank level
+      if (data.lastTankLevel) {
+        const gal = data.lastTankLevel.level_gallons;
         const color = gal > 450 ? 'green' : gal > 408 ? 'yellow' : 'red';
         tankBox.className = `health-box ${color}`;
         document.getElementById('tankValue').textContent = `${Math.round(gal)} gal`;
-        document.getElementById('tankDetail').textContent = relativeTime(data.lastTankReading.secondsAgo);
+        document.getElementById('tankDetail').textContent = relativeTime(data.lastTankLevel.secondsAgo);
       } else {
         tankBox.className = 'health-box gray';
         document.getElementById('tankValue').textContent = '(no data)';
@@ -468,12 +471,12 @@
       }
 
       // Prepare data
-      const labels = data.readings.map(r => new Date(r.timestamp));
-      const levels = data.readings.map(r => r.level_gallons);
+      const labels = data.estimates.map(r => new Date(r.timestamp));
+      const levels = data.estimates.map(r => r.level_gallons);
 
       // Current level for the indicator
-      const currentLevel = data.readings.length > 0
-        ? data.readings[data.readings.length - 1].level_gallons
+      const currentLevel = data.estimates.length > 0
+        ? data.estimates[data.estimates.length - 1].level_gallons
         : null;
 
       if (currentLevel !== null) {
