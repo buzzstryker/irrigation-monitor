@@ -9,6 +9,10 @@ logs/
 # Claude Code session-local config
 .claude/
 
+# Diagnostic/temporary scripts and captures
+tmp_*.js
+captures/
+
 # OS files
 Thumbs.db
 .DS_Store
