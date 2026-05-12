@@ -170,15 +170,6 @@ async function setzone({controllerId, relay, action, durationSec}) {
   return await _request('setzone.php', params);
 }
 
-async function getFlowReading(controllerId) {
-  const result = await _request('statusschedule.php', {controller_id: controllerId}, {maxRetries: 2});
-  const relays = result.response.relays || [];
-  const runningRelay = relays.find(r => r.time === 1 || (r.timestr && r.timestr.toLowerCase().includes('running')));
-  if (runningRelay && runningRelay.flow != null) {
-    return {gpm: runningRelay.flow, timestamp: new Date().toISOString()};
-  }
-  return {gpm: null, timestamp: new Date().toISOString()};
-}
 
 async function getActiveZones(controllerId = null) {
   const params = controllerId ? {controller_id: controllerId} : {};
@@ -280,12 +271,8 @@ if (require.main === module) {
       console.log('Test 3: Active');
       const a = await getActiveZones();
       console.log(JSON.stringify(a, null, 2));
-      
-      console.log('Test 4: Flow');
-      const f = await getFlowReading(1659477);
-      console.log(JSON.stringify(f, null, 2));
-      
-      console.log('Test 5: Verify');
+
+      console.log('Test 4: Verify');
       const v = await verifyProgramsSuspended([1659477, 1977673]);
       console.log(JSON.stringify(v, null, 2));
       
@@ -299,4 +286,4 @@ if (require.main === module) {
   })();
 }
 
-module.exports = {setzone, getFlowReading, getActiveZones, getControllerStatus, verifyProgramsSuspended};
+module.exports = {setzone, getActiveZones, getControllerStatus, verifyProgramsSuspended};
