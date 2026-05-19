@@ -1,0 +1,2 @@
+id,date,et_inches,temp_high_f,temp_low_f,humidity_pct,wind_mph,solar_rad,source,created_at
+170,2026-05-11,0.27,89.6,59.2,88,6,28,actual,1778576401

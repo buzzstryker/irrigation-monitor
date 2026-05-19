@@ -1,0 +1,45 @@
+id,date,zone_id,controller,et_inches,kz_value,target_gallons,actual_gallons,delta_gallons,delta_pct,notes,created_at
+211,2026-05-11,Z1,Loomis Garage,0.27,1,42.1,0,-42.1,-100,No watering events recorded,1778577300
+212,2026-05-11,Z2,Loomis Garage,0.27,1,77.8,0,-77.8,-100,No watering events recorded,1778577300
+213,2026-05-11,Z3,Loomis Garage,0.27,1,58.3,0,-58.3,-100,No watering events recorded,1778577300
+214,2026-05-11,Z4,Loomis Garage,0.27,1,41,0,-41,-100,No watering events recorded,1778577300
+215,2026-05-11,Z5,Loomis Garage,0.27,1,,0,,,"Minutes-based: target null min, actual 0 min",1778577300
+216,2026-05-11,Z6,Loomis Garage,0.27,1,337,0,-337,-100,No watering events recorded,1778577300
+217,2026-05-11,Z7,Loomis Garage,0.27,1,36.3,0,-36.3,-100,No watering events recorded,1778577300
+218,2026-05-11,Z8,Loomis Garage,0.27,1,13,0,-13,-100,No watering events recorded,1778577300
+219,2026-05-11,Z9,Loomis Garage,0.27,1,64.8,0,-64.8,-100,No watering events recorded,1778577300
+220,2026-05-11,Z1,Loomis Pool Equipment,0.27,1,36.7,0,-36.7,-100,No watering events recorded,1778577300
+221,2026-05-11,Z2,Loomis Pool Equipment,0.27,1,49.7,0,-49.7,-100,No watering events recorded,1778577300
+222,2026-05-11,Z3,Loomis Pool Equipment,0.27,1,37.8,0,-37.8,-100,No watering events recorded,1778577300
+223,2026-05-11,Z4,Loomis Pool Equipment,0.27,1,70.2,0,-70.2,-100,No watering events recorded,1778577300
+224,2026-05-11,Z5,Loomis Pool Equipment,0.27,1,51.3,0,-51.3,-100,No watering events recorded,1778577300
+225,2026-05-11,Z6,Loomis Pool Equipment,0.27,1,37.8,0,-37.8,-100,No watering events recorded,1778577300
+226,2026-05-11,Z7,Loomis Pool Equipment,0.27,1,79.4,0,-79.4,-100,No watering events recorded,1778577300
+227,2026-05-11,Z8,Loomis Pool Equipment,0.27,1,121,0,-121,-100,No watering events recorded,1778577300
+228,2026-05-11,Z9,Loomis Pool Equipment,0.27,1,129.6,0,-129.6,-100,No watering events recorded,1778577300
+229,2026-05-11,Z10,Loomis Pool Equipment,0.27,1,118.8,0,-118.8,-100,No watering events recorded,1778577300
+230,2026-05-11,Z11,Loomis Pool Equipment,0.27,1,108,0,-108,-100,No watering events recorded,1778577300
+231,2026-05-11,Z1,Loomis barn,0.27,1,,0,,,"Minutes-based: target 21.6 min, actual 0 min",1778577300
+232,2026-05-11,Z2,Loomis barn,0.27,1,,0,,,"Minutes-based: target 21.6 min, actual 0 min",1778577300
+255,2026-05-12,Z1,Loomis Garage,0,1,0,39,39,100,ET zero — no irrigation needed,1778663700
+256,2026-05-12,Z2,Loomis Garage,0,1,0,72,72,100,ET zero — no irrigation needed,1778663700
+257,2026-05-12,Z3,Loomis Garage,0,1,0,0,0,0,ET zero — no irrigation needed,1778663700
+258,2026-05-12,Z4,Loomis Garage,0,1,0,0,0,0,ET zero — no irrigation needed,1778663700
+259,2026-05-12,Z5,Loomis Garage,0,1,,0,,,"Minutes-based: target null min, actual 0 min",1778663700
+260,2026-05-12,Z6,Loomis Garage,0,1,0,0,0,0,ET zero — no irrigation needed,1778663700
+261,2026-05-12,Z7,Loomis Garage,0,1,0,2.8,2.8,100,ET zero — no irrigation needed,1778663700
+262,2026-05-12,Z8,Loomis Garage,0,1,0,0,0,0,ET zero — no irrigation needed,1778663700
+263,2026-05-12,Z9,Loomis Garage,0,1,0,76,76,100,ET zero — no irrigation needed,1778663700
+264,2026-05-12,Z1,Loomis Pool Equipment,0,1,0,0,0,0,ET zero — no irrigation needed,1778663700
+265,2026-05-12,Z2,Loomis Pool Equipment,0,1,0,0,0,0,ET zero — no irrigation needed,1778663700
+266,2026-05-12,Z3,Loomis Pool Equipment,0,1,0,0,0,0,ET zero — no irrigation needed,1778663700
+267,2026-05-12,Z4,Loomis Pool Equipment,0,1,0,0,0,0,ET zero — no irrigation needed,1778663700
+268,2026-05-12,Z5,Loomis Pool Equipment,0,1,0,0,0,0,ET zero — no irrigation needed,1778663700
+269,2026-05-12,Z6,Loomis Pool Equipment,0,1,0,0,0,0,ET zero — no irrigation needed,1778663700
+270,2026-05-12,Z7,Loomis Pool Equipment,0,1,0,63,63,100,ET zero — no irrigation needed,1778663700
+271,2026-05-12,Z8,Loomis Pool Equipment,0,1,0,0,0,0,ET zero — no irrigation needed,1778663700
+272,2026-05-12,Z9,Loomis Pool Equipment,0,1,0,156,156,100,ET zero — no irrigation needed,1778663700
+273,2026-05-12,Z10,Loomis Pool Equipment,0,1,0,143,143,100,ET zero — no irrigation needed,1778663700
+274,2026-05-12,Z11,Loomis Pool Equipment,0,1,0,130,130,100,ET zero — no irrigation needed,1778663700
+275,2026-05-12,Z1,Loomis barn,0,1,,0,,,"Minutes-based: target 0 min, actual 0 min",1778663700
+276,2026-05-12,Z2,Loomis barn,0,1,,0,,,"Minutes-based: target 0 min, actual 0 min",1778663700

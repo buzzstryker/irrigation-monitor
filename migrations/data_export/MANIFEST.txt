@@ -1,0 +1,26 @@
+Data Export Manifest
+Generated: 2026-05-19T22:05:48.764Z
+Source: irrigation.db (SQLite)
+Destination: Supabase (Postgres)
+
+Tables and row counts:
+
+ditch_health_log                     37 rows  →  ditch_health_log.csv
+et_log                                1 rows  →  et_log.csv
+flow_calibration_log                  0 rows  →  flow_calibration_log.csv
+observations                          0 rows  →  observations.csv
+scheduled_reminders                   0 rows  →  scheduled_reminders.csv
+sms_log                               0 rows  →  sms_log.csv
+tank_level_log                     4331 rows  →  tank_level_log.csv
+tank_sensor_log                       0 rows  →  tank_sensor_log.csv
+user_preferences                      0 rows  →  user_preferences.csv
+warnings                              0 rows  →  warnings.csv
+watering_events                      26 rows  →  watering_events.csv
+zone_coefficients                    22 rows  →  zone_coefficients.csv
+zone_daily_analysis                  44 rows  →  zone_daily_analysis.csv
+zone_gpm_change_log                   0 rows  →  zone_gpm_change_log.csv
+zone_gpm_overrides                    0 rows  →  zone_gpm_overrides.csv
+zone_state_log                       52 rows  →  zone_state_log.csv
+
+Total tables: 16
+Total rows: 4513

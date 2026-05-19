@@ -1,0 +1,27 @@
+id,timestamp,controller,zone_id,relay_id,duration_seconds,gallons,flow_gpm,source,flow_source,flow_quality
+222,1778548172,Loomis Garage,Z7,7,60,2.8,,scheduled,calculated,calculated
+223,1778548472,Loomis Garage,Z2,2,300,72,,scheduled,calculated,calculated
+224,1778550572,Loomis Garage,Z9,9,1140,76,,scheduled,calculated,calculated
+225,1778567313,Loomis Pool Equipment,Z9,9,780,156,,scheduled,calculated,calculated
+226,1778568093,Loomis Pool Equipment,Z10,10,780,143,,scheduled,calculated,calculated
+227,1778568873,Loomis Pool Equipment,Z11,11,780,130,,scheduled,calculated,calculated
+228,1778586216,Loomis Pool Equipment,Z7,7,360,63,,scheduled,calculated,calculated
+229,1778587956,Loomis Garage,Z1,1,300,39,,scheduled,calculated,calculated
+230,1778640601,Loomis Garage,Z8,8,299,14.95,,scheduled,calculated,calculated
+231,1778671206,Loomis Pool Equipment,Z1,1,1200,34,,scheduled,calculated,calculated
+232,1778671506,Loomis Pool Equipment,Z2,2,300,46,,scheduled,calculated,calculated
+233,1778671806,Loomis Pool Equipment,Z3,3,300,35,,scheduled,calculated,calculated
+234,1778672106,Loomis Pool Equipment,Z4,4,300,65,,scheduled,calculated,calculated
+235,1778672406,Loomis Pool Equipment,Z5,5,300,47.5,,scheduled,calculated,calculated
+236,1778672706,Loomis Pool Equipment,Z6,6,300,35,,scheduled,calculated,calculated
+237,1778683808,Loomis Garage,Z1,1,300,39,,scheduled,calculated,calculated
+238,1778684108,Loomis Garage,Z2,2,300,72,,scheduled,calculated,calculated
+239,1778684408,Loomis Garage,Z3,3,300,54,,scheduled,calculated,calculated
+240,1778684708,Loomis Garage,Z4,4,300,38,,scheduled,calculated,calculated
+241,1778686509,Loomis Garage,Z6,6,1801,312.17333333333335,,scheduled,calculated,calculated
+242,1778687228,Loomis Garage,Z7,7,719,33.55333333333333,,scheduled,calculated,calculated
+243,1778687829,Loomis Garage,Z8,8,601,30.05,,scheduled,calculated,calculated
+244,1778702831,Loomis Pool Equipment,Z7,7,420,73.5,,scheduled,calculated,calculated
+245,1778703251,Loomis Pool Equipment,Z8,8,420,112,,scheduled,calculated,calculated
+246,1778723113,Loomis Garage,Z9,9,899,59.93333333333333,,scheduled,calculated,calculated
+247,1778726954,Loomis Garage,Z8,8,240,12,,scheduled,calculated,calculated
