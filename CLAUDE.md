@@ -27,11 +27,10 @@ Lenovo (always on)
 +-- scheduler.js               — 7 cron jobs
 +-- coefficient-model.js       — Zone Kz model, daily target vs actual
 +-- sync.js                    — SQLite ? Supabase sync
-+-- zones.config.js            — Full zone inventory + tank constants + flowMeterAttribution
-+-- db.js                      — better-sqlite3, 18 tables, getDb() sync pattern
-+-- z5-startup-selftest.js     — Garage Z5 cap integrity self-test (Phase 4a)
-+-- flow-calibration.js        — Pool Equipment zone GPM calibration CLI (Phase 4a)
-+-- migrations/                — SQL migration files (Phase 4a+)
++-- zones.config.js            — Full zone inventory + tank constants
++-- db.js                      — better-sqlite3, 15 tables, getDb() sync pattern
++-- tank-drawdown-calibration.js — Tank-drawdown GPM calibration CLI
++-- migrations/                — SQL migration files
 +-- sms/
 ¦   +-- handler.js             — Twilio inbound webhook
 ¦   +-- sender.js              — sendSMS(), sendMMS(), broadcast()
@@ -65,22 +64,22 @@ Lenovo (always on)
 
 ## Controllers & Zones
 
-### Garage Controller (id: 1659477) — flow meter healthy (recently restored)
+### Garage Controller (id: 1659477) — flow meter physically installed
 | Zone | Name | Type | GPM |
 |------|------|------|-----|
 | Z1 | Frontyard East Sod | Sod | 7.8 |
 | Z2 | Frontyard West Sod | Sod | 14.4 |
 | Z3 | Backyard East Sod | Sod | 10.8 |
 | Z4 | Backyard West Sod | Sod | 7.6 |
-| Z5 | **Attribution Gate (CAPPED)** | System | 0.0 (capped 2026-05-11) |
+| Z5 | **Capped (vestigial)** | System | 0.0 |
 | Z6 | Frontyard Drip | Drip | 10.4 |
 | Z7 | Backyard House Drip | Drip | 2.8 |
 | Z8 | Garden Raised Beds | Drip | 3.0 |
 | Z9 | Viewshed Hedges East | Drip | 4.0 |
 
-**Z5 CRITICAL:** Capped and serves as attribution gate for Pool Equipment flow metering. Valve opens for gating signal but cap prevents flow. Self-test on startup verifies cap integrity (<0.3 GPM). **DO NOT uncap without coordinating with flow attribution logic.**
+**Z5 Note:** Physically capped (as of 2026-05-11). Was Phase 4a attribution gate; deprecated. Safe to leave as-is. See "Phase 4a History" section below for context.
 
-### Pool Equipment Controller (id: 1977673) — physical flow meter broken; flow attributed to Garage meter via Z5 gating (per Phase 4a, 2026-05-11)
+### Pool Equipment Controller (id: 1977673) — physical flow meter installed but unreliable
 | Zone | Name | Type | GPM |
 |------|------|------|-----|
 | Z1 | Pool Drip | Drip | 1.7 |
@@ -95,7 +94,7 @@ Lenovo (always on)
 | Z10 | West Trees Rocks | Sod | 11.0 |
 | Z11 | West Trees Septic | Sod | 10.0 |
 
-**Note:** GPM values are estimates until Phase 4a calibration runs complete.
+**Note:** GPM values should be re-measured via tank-drawdown calibration when emitter configuration changes.
 
 ### Barn Controller (id: 1970558) — NO flow meter, duration scaling only
 | Zone | Name | Type | GPM |
@@ -107,13 +106,13 @@ Lenovo (always on)
 
 ---
 
-## Database Schema (18 tables)
+## Database Schema (15 tables)
 
 | Table | Phase | Purpose |
 |-------|-------|---------|
 | zone_state_log | 0 | Zone on/off transitions every poll |
 | tank_level_log | 0 | Tank level every 60s |
-| watering_events | 0 | Completed zone runs with gallons |
+| watering_events | 0 | Completed zone runs; gallons calculated from configured GPM × duration |
 | warnings | 0 | Low tank, ditch failure alerts |
 | et_log | 1 | Daily ET from Open-Meteo |
 | zone_coefficients | 2 | Per-zone Kz learning coefficients |
@@ -124,13 +123,10 @@ Lenovo (always on)
 | ditch_health_log | 6 | Daily flow meter diagnostic |
 | tank_sensor_log | 7 | ESP32 ultrasonic sensor readings |
 | user_preferences | — | Per-user language, phone, role |
-| flow_attribution_warnings | 4a | Flow attribution ambiguity events |
-| controller_flow_meter_health | 4a | Per-controller meter health state |
-| controller_flow_meter_health_log | 4a | Meter health transition log |
-| z5_selftest_log | 4a | Z5 cap integrity self-tests |
-| flow_calibration_log | 4a | Pool Equipment zone GPM measurements |
+| flow_calibration_log | 4 | Tank-drawdown GPM calibration measurements |
+| et_forecast_log | 1 | Multi-day ET forecast snapshots |
 
-**Phase 4a additions to watering_events:** `flow_source`, `flow_source_controller_id`, `flow_quality` columns
+**Note:** `watering_events.flow_source` and `flow_quality` columns always contain 'calculated' (backfilled 2026-05-12)
 
 **Pattern:** Always use `getDb()` from db.js — synchronous better-sqlite3.
 **Never use:** async initDb() or sql.js — was a failed workaround, now replaced.
@@ -141,19 +137,18 @@ Lenovo (always on)
 
 | Phase | Status | Description |
 |-------|--------|-------------|
-| 0 | ? Complete | Hydrawise polling, zone state, tank model |
-| 1 | ? Complete | ET engine (Open-Meteo + Penman-Monteith), daily logging |
-| 2 | ? Complete | Zone coefficient model, daily target vs actual report |
-| 3 | ?? Paused | Twilio SMS (resuming after 4a) — account created, credentials needed |
-| 4a | ?? Active | Attribution infrastructure (schema, config, modules, calibration) |
-| 4b | ? Pending | Scheduling cutover via Hydrawise setzone API |
-| 5 | ? Pending | Observation feedback loop, Kz learning |
-| 6 | ? Pending | Ditch water health check (mechanism redesign needed - Z5 now capped) |
-| 7 | ? Pending | ESP32 tank sensor (~$20 hardware) |
+| 0 | ✅ Complete | Hydrawise polling, zone state, tank model |
+| 1 | ✅ Complete | ET engine (Open-Meteo + Penman-Monteith), daily logging |
+| 2 | ✅ Complete | Zone coefficient model, daily target vs actual report |
+| 3 | ⏸️ Paused | Twilio SMS — account created, credentials needed |
+| 4 | ⬜ Pending | Scheduling cutover via Hydrawise setzone API |
+| 5 | ⬜ Pending | Observation feedback loop, Kz learning |
+| 6 | ⬜ Pending | Ditch water health check |
+| 7 | ⬜ Pending | ESP32 tank sensor (~$20 hardware) |
 
 ---
 
-## Optimized Static Schedule (baseline before Phase 4b)
+## Optimized Static Schedule (baseline before Phase 4)
 
 This is the manually-entered Hydrawise schedule to use until Phase 4b takes control.
 
@@ -205,7 +200,7 @@ Same timing, sod zones × 0.67 duration, drips unchanged.
 
 ---
 
-## Web App (Phase 4b+)
+## Web App (Phase 4+)
 
 **Stack:** Next.js + Supabase + Vercel (same as Late Add v2)
 **Tabs:** Dashboard, Zones, Check-In, History/Logs, Control, Settings
@@ -227,10 +222,10 @@ Same timing, sod zones × 0.67 duration, drips unchanged.
 2. **Barn uses duration scaling** — no flow meter, runtime = baseline_minutes × (ET/ET_avg) × Kz
 3. **Skip irrigation if:** ET < 0.05 in, forecast rain > 0.25 in, or yesterday rain > 0.5 in
 4. **Temperature threshold:** Don't water when forecast < 68°F (matches current Hydrawise Predictive Watering setting)
-5. **Hydrawise programs suspended** when Phase 4b takes control — system issues setzone commands only
+5. **Hydrawise programs suspended** when Phase 4 takes control — system issues setzone commands only
 6. **Conflict detection:** Daily check that Hydrawise programs are still suspended — alert if re-enabled
 7. **sql.js was a failed workaround** for Node 24 — Node was downgraded to 22, better-sqlite3 reinstalled
-8. **Pool Equipment flow attribution (Phase 4a)** — Pool Equipment controller's broken flow meter is worked around by attributing flow to the Garage flow meter. When a Pool zone runs, capped Garage Z5 opens first (providing a gating signal), then the Pool zone opens. The Garage meter's incremental flow is attributed to the Pool zone. This allows accurate GPM measurement and water usage tracking despite the broken Pool Equipment meter. Garage and Pool Equipment share a serialized valve timeline (attribution group). **Garage Z5 is system-critical and must remain capped.**
+8. **Per-zone GPM is static configuration** — Real-time flow measurement is not available via the Hydrawise REST API v1 (investigated and documented 2026-05-12; see docs/hydrawise-api-flow-fields.md). Per-zone GPM values are manually maintained in zones.config.js. These should be re-measured and updated whenever emitter configuration changes (added/removed/repaired outlets downstream of a valve). Tank-drawdown calibration via tank-drawdown-calibration.js is the recommended measurement method: run a zone for known duration, measure tank level before/after, subtract concurrent ditch fill, compute GPM.
 
 ---
 
@@ -255,19 +250,16 @@ DB_PATH=./irrigation.db
 
 ## Open To-Dos
 
-- [ ] Push irrigation-monitor to GitHub (create repo at github.com/buzzstryker/irrigation-monitor)
+- [x] ~~Push irrigation-monitor to GitHub~~ — created at github.com/buzzstryker/irrigation-monitor (2026-05-11)
 - [ ] Add Twilio Auth Token and phone number to .env (Phase 3)
 - [ ] Create Supabase project, run schema.sql + seed.sql
-- [x] ~~Verify Garage Z5 "Dummy Flow Test"~~ — Z5 capped and designated as attribution gate (Phase 4a)
 - [ ] Walk Garage Z6 Frontyard Drip while running — verify spray vs drip (10.4 GPM is anomalously high for drip)
-- [x] ~~Repair/clean Garage flow meter paddlewheel~~ — meter recently restored and healthy
 - [ ] Capture Barn controller zone relay IDs
 - [ ] Cutover city water from barn location (not house) before spring irrigation
 - [ ] Deploy to Railway for always-on cloud polling (after Phase 3)
 - [ ] Import zone photos from Hydrawise screenshots into zone-images/ folder
-- [ ] Implement optimized schedule in Hydrawise app (manual until Phase 4b)
-- [ ] Run Phase 4a calibration for all 11 Pool Equipment zones (Wave 6 - human supervised)
-- [ ] Decide pm2 Z5 self-test wiring (Wave 7 - irrigation-poll vs irrigation-server)
+- [ ] Implement optimized schedule in Hydrawise app (manual until Phase 4)
+- [ ] Periodic GPM re-measurement via tank-drawdown-calibration.js when emitter configuration changes
 
 ---
 
@@ -286,4 +278,20 @@ DB_PATH=./irrigation.db
 
 ---
 
-*Last updated: May 2026 — Phases 0, 1, 2 complete. Phase 4a Waves 1-5 complete (schema, config, modules). Phase 3 paused (resuming after 4a). Waves 6-7 pending.*
+## Phase 4a History
+
+Phase 4a (Attribution Infrastructure) was developed in May 2026 with the goal of capturing real-time per-zone flow data from the Hydrawise flow meters via the REST v1 API. The design assumed that during an active zone run, the API would expose a real-time GPM value that could be attributed to the running zone — and for Pool Equipment zones (whose flow meter is unreliable), the architecture used a capped "dummy" Z5 valve on the Garage controller to gate flow readings through the Garage flow meter.
+
+The infrastructure was built across multiple sessions: a flowMeterAttribution config block in zones.config.js, new database tables (flow_attribution_warnings, controller_flow_meter_health, controller_flow_meter_health_log, z5_selftest_log, flow_calibration_log), standalone modules (z5-startup-selftest.js, flow-calibration.js), and dashboard support for attribution-aware flow display.
+
+Then a focused investigation in May 2026 (see docs/hydrawise-api-flow-fields.md) determined definitively that the Hydrawise REST v1 API does NOT expose real-time flow data — neither in the statusschedule.php endpoint during an active run, nor in any documented historical endpoint. The only flow-related field is the meter calibration constant (sensors[0].rate), not live data.
+
+Phase 4a's infrastructure was deprecated in May 2026 across six refactor waves. See docs/phase-4a-audit.md for the complete audit of what was removed, repurposed, or kept. The flow_calibration_log table survives, repurposed for tank-drawdown calibration measurements (tank_gpm is now the primary measured value, not a cross-check).
+
+**The new architecture (current):** Per-zone GPM is a manual static input in zones.config.js, updated whenever emitter configuration changes. Tank-drawdown calibration via tank-drawdown-calibration.js is the closest approximation to measurement available without real-time API data. Real-time per-zone flow data would require migrating to Hydrawise's undocumented GraphQL API, which is potential future work but not currently planned.
+
+**What was learned:** Building infrastructure before validating API capabilities is costly. The Phase 4a work wasn't wasted — it forced a systematic investigation of the API's actual capabilities and produced the tank-drawdown measurement method as a workaround. But validating the API first (via a 5-minute focused test with an active zone) would have saved ~8 hours of infrastructure development that had to be unwound.
+
+---
+
+*Last updated 2026-05-19 — Phase 4a deprecated in favor of static-GPM architecture. Phases 0, 1, 2 complete. Phase 3 paused. Phase 4 pending.*
