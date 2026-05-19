@@ -185,7 +185,7 @@ app.get('/api/dashboard/events', (req, res) => {
     // Query watering_events
     const rows = db.prepare(
       `SELECT timestamp, controller, zone_id, relay_id, duration_seconds, gallons,
-              flow_gpm, flow_source, flow_source_controller_id, flow_quality
+              flow_source, flow_quality
        FROM watering_events
        WHERE timestamp >= ?
        ORDER BY timestamp DESC`
@@ -203,11 +203,10 @@ app.get('/api/dashboard/events', (req, res) => {
         zoneType: zone ? zone.type : null,
         relayId: row.relay_id,
         durationSeconds: row.duration_seconds,
-        gallons: row.gallons,
+        gallonsCalculated: row.gallons,
         configuredGpm: zone ? zone.gpm : null,
-        measuredFlowGpm: row.flow_gpm,
-        flowQuality: row.flow_quality || 'unknown',
-        flowSource: row.flow_source || 'unknown'
+        flowQuality: row.flow_quality || 'calculated',
+        flowSource: row.flow_source || 'calculated'
       };
     });
 
@@ -215,7 +214,8 @@ app.get('/api/dashboard/events', (req, res) => {
       events,
       rangeStart: new Date(rangeStart * 1000).toISOString(),
       rangeEnd: new Date(now * 1000).toISOString(),
-      count: events.length
+      count: events.length,
+      note: "Gallons are calculated from configured zone GPM × run duration. Real-time flow measurement is not available via the Hydrawise REST API v1."
     });
   } catch (err) {
     console.error('[API] /api/dashboard/events error:', err.message);

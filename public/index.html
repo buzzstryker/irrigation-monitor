@@ -346,18 +346,18 @@
               <th>Controller</th>
               <th>Zone</th>
               <th>Duration</th>
-              <th>Gallons</th>
-              <th>Config GPM</th>
-              <th>Measured GPM</th>
-              <th>Flow Source</th>
-              <th>Flow Quality</th>
+              <th>Gallons (calc)</th>
+              <th>Calc GPM</th>
             </tr>
           </thead>
           <tbody id="eventsTableBody">
-            <tr><td colspan="9" style="text-align: center; padding: 24px;">Loading...</td></tr>
+            <tr><td colspan="6" style="text-align: center; padding: 24px;">Loading...</td></tr>
           </tbody>
         </table>
       </div>
+      <p style="margin-top: 12px; font-size: 13px; color: #7f8c8d; font-style: italic;">
+        Gallons are calculated from configured zone GPM × duration. Real-time flow measurement is not available via the Hydrawise REST API v1 (see <code>docs/hydrawise-api-flow-fields.md</code> in the repo).
+      </p>
     </section>
 
     <!-- Footer -->
@@ -615,27 +615,24 @@
       const tbody = document.getElementById('eventsTableBody');
 
       if (data.events.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="9" style="text-align: center; padding: 24px;">No watering events in the last 7 days</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="6" style="text-align: center; padding: 24px;">No watering events in the last 7 days</td></tr>';
         return;
       }
 
       const rows = data.events.map(e => {
         const when = `${relativeTime((Date.now() - new Date(e.timestamp)) / 1000)}<br><small>${absoluteTime(e.timestamp)}</small>`;
-        const zoneName = e.zoneName || '<span class="null-value">(unknown)</span>';
+        const zoneName = e.zoneName ? e.zoneName : '';
+        const zoneDisplay = zoneName ? `${e.zoneId} — ${zoneName}` : e.zoneId;
         const configGpm = e.configuredGpm !== null ? e.configuredGpm.toFixed(1) : '<span class="null-value">—</span>';
-        const measuredGpm = e.measuredFlowGpm !== null ? e.measuredFlowGpm.toFixed(1) : '<span class="null-value">—</span>';
 
         return `
           <tr>
             <td>${when}</td>
             <td>${e.controller}</td>
-            <td>${e.zoneId} (${zoneName})</td>
+            <td>${zoneDisplay}</td>
             <td>${formatDuration(e.durationSeconds)}</td>
-            <td>${e.gallons ? e.gallons.toFixed(1) : '<span class="null-value">—</span>'}</td>
+            <td>${e.gallonsCalculated ? e.gallonsCalculated.toFixed(1) : '<span class="null-value">—</span>'}</td>
             <td>${configGpm}</td>
-            <td>${measuredGpm}</td>
-            <td>${e.flowSource}</td>
-            <td>${e.flowQuality}</td>
           </tr>
         `;
       }).join('');
