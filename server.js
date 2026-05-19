@@ -13,6 +13,7 @@ const bodyParser = require('body-parser');
 const { getDb } = require('./db');
 const { handleInboundSMS } = require('./sms/handler');
 const { sendSMS } = require('./sms/sender');
+const { getEffectiveGpm, getAllZoneGpms, setOverride, resetOverride, getChangeHistory } = require('./zone-gpm');
 
 // Load scheduler (registers cron jobs on import)
 require('./scheduler');
@@ -195,6 +196,9 @@ app.get('/api/dashboard/events', (req, res) => {
       const key = `${row.controller}:${row.zone_id}`;
       const zone = zoneMap.get(key);
 
+      // Get effective GPM (override if present, else config default)
+      const effectiveGpmData = getEffectiveGpm(row.controller, row.zone_id);
+
       return {
         timestamp: new Date(row.timestamp * 1000).toISOString(),
         controller: row.controller,
@@ -204,7 +208,8 @@ app.get('/api/dashboard/events', (req, res) => {
         relayId: row.relay_id,
         durationSeconds: row.duration_seconds,
         gallonsCalculated: row.gallons,
-        configuredGpm: zone ? zone.gpm : null,
+        configuredGpm: effectiveGpmData.gpm,
+        gpmSource: effectiveGpmData.source,
         flowQuality: row.flow_quality || 'calculated',
         flowSource: row.flow_source || 'calculated'
       };
@@ -215,7 +220,7 @@ app.get('/api/dashboard/events', (req, res) => {
       rangeStart: new Date(rangeStart * 1000).toISOString(),
       rangeEnd: new Date(now * 1000).toISOString(),
       count: events.length,
-      note: "Gallons are calculated from configured zone GPM × run duration. Real-time flow measurement is not available via the Hydrawise REST API v1."
+      note: "Gallons are calculated from the zone's effective GPM (override if present, else configured default) × run duration. Real-time flow measurement is not available via the Hydrawise REST API v1 (see docs/hydrawise-api-flow-fields.md)."
     });
   } catch (err) {
     console.error('[API] /api/dashboard/events error:', err.message);
@@ -260,6 +265,102 @@ app.get('/api/dashboard/tank', (req, res) => {
     });
   } catch (err) {
     console.error('[API] /api/dashboard/tank error:', err.message);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// ──────────────────────────────────────────────
+// Zone GPM management endpoints
+// ──────────────────────────────────────────────
+
+app.get('/api/zones/gpm', (req, res) => {
+  try {
+    const zones = getAllZoneGpms();
+    res.json({
+      zones,
+      count: zones.length
+    });
+  } catch (err) {
+    console.error('[API] /api/zones/gpm error:', err.message);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+app.put('/api/zones/gpm/:controller/:zoneId', (req, res) => {
+  try {
+    const controller = decodeURIComponent(req.params.controller);
+    const zoneId = req.params.zoneId;
+    const { gpm, reason } = req.body;
+
+    // Validate gpm value
+    if (typeof gpm !== 'number') {
+      return res.status(400).json({ success: false, error: 'gpm must be a number' });
+    }
+
+    if (gpm < 0) {
+      return res.status(400).json({ success: false, error: 'gpm must be non-negative' });
+    }
+
+    if (gpm >= 100) {
+      return res.status(400).json({ success: false, error: 'gpm exceeds maximum of 100 (likely a typo)' });
+    }
+
+    // Set the override
+    const zone = setOverride(controller, zoneId, gpm, reason);
+
+    res.json({
+      success: true,
+      zone
+    });
+  } catch (err) {
+    console.error('[API] PUT /api/zones/gpm/:controller/:zoneId error:', err.message);
+    if (err.message.includes('not found')) {
+      res.status(400).json({ success: false, error: err.message });
+    } else {
+      res.status(500).json({ success: false, error: 'Internal server error' });
+    }
+  }
+});
+
+app.delete('/api/zones/gpm/:controller/:zoneId', (req, res) => {
+  try {
+    const controller = decodeURIComponent(req.params.controller);
+    const zoneId = req.params.zoneId;
+    const { reason } = req.body || {};
+
+    // Reset the override
+    const result = resetOverride(controller, zoneId, reason);
+
+    res.json({
+      success: true,
+      zone: result.zone
+    });
+  } catch (err) {
+    console.error('[API] DELETE /api/zones/gpm/:controller/:zoneId error:', err.message);
+    if (err.message.includes('not found')) {
+      res.status(400).json({ success: false, error: err.message });
+    } else {
+      res.status(500).json({ success: false, error: 'Internal server error' });
+    }
+  }
+});
+
+app.get('/api/zones/gpm/:controller/:zoneId/history', (req, res) => {
+  try {
+    const controller = decodeURIComponent(req.params.controller);
+    const zoneId = req.params.zoneId;
+    const limit = Math.max(1, Math.min(100, parseInt(req.query.limit, 10) || 20));
+
+    const history = getChangeHistory(controller, zoneId, limit);
+
+    res.json({
+      controller,
+      zoneId,
+      history,
+      count: history.length
+    });
+  } catch (err) {
+    console.error('[API] GET /api/zones/gpm/:controller/:zoneId/history error:', err.message);
     res.status(500).json({ error: 'Internal server error' });
   }
 });

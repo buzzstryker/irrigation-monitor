@@ -284,6 +284,116 @@
       justify-content: center;
       gap: 16px;
     }
+
+    /* Zone GPM Configuration Styles */
+    .gpm-input {
+      width: 70px;
+      padding: 4px 8px;
+      border: 1px solid #bdc3c7;
+      border-radius: 4px;
+      font-size: 14px;
+      font-weight: 600;
+    }
+
+    .gpm-input:focus {
+      outline: none;
+      border-color: #3498db;
+    }
+
+    .gpm-default {
+      font-size: 12px;
+      color: #95a5a6;
+      margin-left: 8px;
+    }
+
+    .source-badge {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 3px;
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+    }
+
+    .source-badge.config {
+      background: #ecf0f1;
+      color: #7f8c8d;
+    }
+
+    .source-badge.override {
+      background: #d4edda;
+      color: #155724;
+    }
+
+    .btn-small {
+      padding: 4px 8px;
+      font-size: 12px;
+      margin: 0 2px;
+    }
+
+    .btn-save {
+      background: #27ae60;
+    }
+
+    .btn-save:hover:not(:disabled) {
+      background: #229954;
+    }
+
+    .btn-reset {
+      background: #e67e22;
+    }
+
+    .btn-reset:hover:not(:disabled) {
+      background: #d35400;
+    }
+
+    .btn-history {
+      background: #95a5a6;
+    }
+
+    .btn-history:hover:not(:disabled) {
+      background: #7f8c8d;
+    }
+
+    .history-row {
+      background: #f8f9fa !important;
+      border-left: 4px solid #3498db;
+    }
+
+    .history-row td {
+      padding: 16px !important;
+    }
+
+    .history-list {
+      list-style: none;
+      padding: 0;
+      margin: 0;
+    }
+
+    .history-list li {
+      padding: 8px 0;
+      border-bottom: 1px solid #ecf0f1;
+      font-size: 13px;
+    }
+
+    .history-list li:last-child {
+      border-bottom: none;
+    }
+
+    .error-text {
+      color: #e74c3c;
+      font-size: 12px;
+      margin-top: 4px;
+    }
+
+    .success-flash {
+      animation: successFlash 0.5s ease-out;
+    }
+
+    @keyframes successFlash {
+      0% { background: #d4edda; }
+      100% { background: inherit; }
+    }
   </style>
 </head>
 <body>
@@ -360,6 +470,34 @@
       </p>
     </section>
 
+    <!-- Zone GPM Configuration Section -->
+    <section>
+      <h2>Zone GPM configuration</h2>
+      <p style="margin-bottom: 16px; font-size: 14px; color: #7f8c8d;">
+        Per-zone GPM values used for gallons calculation. Edit when emitter configuration changes (added/removed/repaired outlets).
+        Changes take effect immediately for future watering events; historical events are not recomputed.
+      </p>
+      <div class="table-wrapper">
+        <table>
+          <thead>
+            <tr>
+              <th>Controller</th>
+              <th>Zone</th>
+              <th>Type</th>
+              <th>Config Default</th>
+              <th>Current Effective GPM</th>
+              <th>Source</th>
+              <th>Last Changed</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody id="gpmTableBody">
+            <tr><td colspan="8" style="text-align: center; padding: 24px;">Loading...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
     <!-- Footer -->
     <footer>
       <div>Live from local SQLite database via Express server on port 3001</div>
@@ -414,16 +552,18 @@
       errorBanner.textContent = '';
 
       try {
-        // Fetch all three endpoints in parallel
-        const [healthRes, eventsRes, tankRes] = await Promise.all([
+        // Fetch all four endpoints in parallel
+        const [healthRes, eventsRes, tankRes, gpmRes] = await Promise.all([
           fetch('/api/dashboard/health'),
           fetch('/api/dashboard/events?days=7'),
-          fetch('/api/dashboard/tank?hours=24')
+          fetch('/api/dashboard/tank?hours=24'),
+          fetch('/api/zones/gpm')
         ]);
 
         const health = await healthRes.json();
         const events = await eventsRes.json();
         const tank = await tankRes.json();
+        const gpm = await gpmRes.json();
 
         // Update last-updated timestamp
         document.getElementById('lastUpdated').textContent = new Date().toLocaleTimeString();
@@ -432,6 +572,7 @@
         renderHealthStrip(health);
         renderTankChart(tank);
         renderEventsTable(events);
+        renderGpmTable(gpm);
       } catch (err) {
         console.error('[dashboard] loadDashboard failed:', err);
         const errorBanner = document.getElementById('errorBanner');
@@ -638,6 +779,254 @@
       }).join('');
 
       tbody.innerHTML = rows;
+    }
+
+    // Render GPM configuration table
+    function renderGpmTable(data) {
+      const tbody = document.getElementById('gpmTableBody');
+
+      if (data.zones.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="8" style="text-align: center; padding: 24px;">No zones configured</td></tr>';
+        return;
+      }
+
+      const rows = data.zones.map(z => {
+        const configDefault = z.configGpm !== null ? z.configGpm.toFixed(1) : '<span class="null-value">TBD</span>';
+        const effectiveGpm = z.effectiveGpm !== null ? z.effectiveGpm : null;
+        const lastChanged = z.overrideUpdatedAt ? absoluteTime(z.overrideUpdatedAt) : '—';
+        const sourceBadge = `<span class="source-badge ${z.source}">${z.source}</span>`;
+
+        const rowId = `gpm-row-${z.controller.replace(/\s+/g, '-')}-${z.zoneId}`;
+        const inputId = `gpm-input-${z.controller.replace(/\s+/g, '-')}-${z.zoneId}`;
+        const errorId = `gpm-error-${z.controller.replace(/\s+/g, '-')}-${z.zoneId}`;
+        const historyId = `gpm-history-${z.controller.replace(/\s+/g, '-')}-${z.zoneId}`;
+
+        const zoneName = z.zoneName || '';
+        const zoneDisplay = zoneName ? `${z.zoneId} — ${zoneName}` : z.zoneId;
+
+        return `
+          <tr id="${rowId}">
+            <td>${z.controller}</td>
+            <td>${zoneDisplay}</td>
+            <td>${z.zoneType || '<span class="null-value">—</span>'}</td>
+            <td><span class="gpm-default">${configDefault}</span></td>
+            <td>
+              <input
+                type="number"
+                class="gpm-input"
+                id="${inputId}"
+                value="${effectiveGpm !== null ? effectiveGpm : ''}"
+                step="0.1"
+                min="0"
+                max="100"
+                ${effectiveGpm === null ? 'disabled' : ''}
+                onchange="onGpmChange('${z.controller}', '${z.zoneId}', ${effectiveGpm})"
+              />
+              <div id="${errorId}" class="error-text" style="display: none;"></div>
+            </td>
+            <td>${sourceBadge}</td>
+            <td>${lastChanged}</td>
+            <td>
+              <button
+                class="btn-small btn-save"
+                id="save-${inputId}"
+                onclick="saveGpm('${z.controller}', '${z.zoneId}')"
+                disabled
+              >Save</button>
+              <button
+                class="btn-small btn-reset"
+                id="reset-${inputId}"
+                onclick="resetGpm('${z.controller}', '${z.zoneId}')"
+                ${z.source !== 'override' ? 'disabled' : ''}
+              >Reset</button>
+              <button
+                class="btn-small btn-history"
+                onclick="toggleHistory('${z.controller}', '${z.zoneId}')"
+              >History</button>
+            </td>
+          </tr>
+          <tr id="${historyId}" style="display: none;" class="history-row">
+            <td colspan="8">
+              <div style="padding: 8px;">
+                <strong>Change History:</strong>
+                <ul class="history-list" id="${historyId}-list">
+                  <li>Loading...</li>
+                </ul>
+              </div>
+            </td>
+          </tr>
+        `;
+      }).join('');
+
+      tbody.innerHTML = rows;
+    }
+
+    // Track original values per input to enable/disable Save button
+    const originalGpmValues = new Map();
+
+    function onGpmChange(controller, zoneId, originalValue) {
+      const inputId = `gpm-input-${controller.replace(/\s+/g, '-')}-${zoneId}`;
+      const saveBtn = document.getElementById(`save-${inputId}`);
+      const input = document.getElementById(inputId);
+      const errorDiv = document.getElementById(`gpm-error-${controller.replace(/\s+/g, '-')}-${zoneId}`);
+
+      // Store original value if not already stored
+      const key = `${controller}:${zoneId}`;
+      if (!originalGpmValues.has(key)) {
+        originalGpmValues.set(key, originalValue);
+      }
+
+      // Validate input
+      const value = parseFloat(input.value);
+      if (isNaN(value) || value < 0) {
+        errorDiv.textContent = 'Invalid value. Must be a non-negative number.';
+        errorDiv.style.display = 'block';
+        saveBtn.disabled = true;
+        return;
+      }
+
+      if (value >= 100) {
+        errorDiv.textContent = 'Value exceeds maximum of 100. This is likely a typo.';
+        errorDiv.style.display = 'block';
+        saveBtn.disabled = true;
+        return;
+      }
+
+      // Clear error
+      errorDiv.style.display = 'none';
+
+      // Enable save button if value changed
+      const changed = Math.abs(value - originalGpmValues.get(key)) > 0.01;
+      saveBtn.disabled = !changed;
+    }
+
+    async function saveGpm(controller, zoneId) {
+      const inputId = `gpm-input-${controller.replace(/\s+/g, '-')}-${zoneId}`;
+      const input = document.getElementById(inputId);
+      const saveBtn = document.getElementById(`save-${inputId}`);
+      const errorDiv = document.getElementById(`gpm-error-${controller.replace(/\s+/g, '-')}-${zoneId}`);
+
+      const gpm = parseFloat(input.value);
+      const reason = prompt('Optional: Enter reason for this change (leave blank to skip)');
+
+      // If user cancelled the prompt, abort
+      if (reason === null) return;
+
+      saveBtn.disabled = true;
+
+      try {
+        const response = await fetch(`/api/zones/gpm/${encodeURIComponent(controller)}/${zoneId}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ gpm, reason: reason || undefined })
+        });
+
+        const result = await response.json();
+
+        if (!result.success) {
+          errorDiv.textContent = result.error;
+          errorDiv.style.display = 'block';
+          return;
+        }
+
+        // Success - reload the GPM table to show updated values
+        const gpmRes = await fetch('/api/zones/gpm');
+        const gpmData = await gpmRes.json();
+        renderGpmTable(gpmData);
+
+        // Flash the row green
+        const rowId = `gpm-row-${controller.replace(/\s+/g, '-')}-${zoneId}`;
+        const row = document.getElementById(rowId);
+        row.classList.add('success-flash');
+        setTimeout(() => row.classList.remove('success-flash'), 500);
+
+      } catch (err) {
+        console.error('[dashboard] saveGpm failed:', err);
+        errorDiv.textContent = 'Network error: ' + err.message;
+        errorDiv.style.display = 'block';
+      } finally {
+        saveBtn.disabled = false;
+      }
+    }
+
+    async function resetGpm(controller, zoneId) {
+      const confirmed = confirm(`Reset zone ${zoneId} on ${controller} to config default?`);
+      if (!confirmed) return;
+
+      const reason = prompt('Optional: Enter reason for this reset (leave blank to skip)');
+      if (reason === null) return;
+
+      const resetBtn = document.getElementById(`reset-gpm-input-${controller.replace(/\s+/g, '-')}-${zoneId}`);
+      const errorDiv = document.getElementById(`gpm-error-${controller.replace(/\s+/g, '-')}-${zoneId}`);
+
+      try {
+        const response = await fetch(`/api/zones/gpm/${encodeURIComponent(controller)}/${zoneId}`, {
+          method: 'DELETE',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ reason: reason || undefined })
+        });
+
+        const result = await response.json();
+
+        if (!result.success) {
+          errorDiv.textContent = result.error;
+          errorDiv.style.display = 'block';
+          return;
+        }
+
+        // Success - reload the GPM table
+        const gpmRes = await fetch('/api/zones/gpm');
+        const gpmData = await gpmRes.json();
+        renderGpmTable(gpmData);
+
+        // Flash the row green
+        const rowId = `gpm-row-${controller.replace(/\s+/g, '-')}-${zoneId}`;
+        const row = document.getElementById(rowId);
+        row.classList.add('success-flash');
+        setTimeout(() => row.classList.remove('success-flash'), 500);
+
+      } catch (err) {
+        console.error('[dashboard] resetGpm failed:', err);
+        errorDiv.textContent = 'Network error: ' + err.message;
+        errorDiv.style.display = 'block';
+      }
+    }
+
+    async function toggleHistory(controller, zoneId) {
+      const historyId = `gpm-history-${controller.replace(/\s+/g, '-')}-${zoneId}`;
+      const historyRow = document.getElementById(historyId);
+      const historyList = document.getElementById(`${historyId}-list`);
+
+      if (historyRow.style.display === 'none') {
+        // Show and load history
+        historyRow.style.display = '';
+
+        try {
+          const response = await fetch(`/api/zones/gpm/${encodeURIComponent(controller)}/${zoneId}/history?limit=20`);
+          const data = await response.json();
+
+          if (data.history.length === 0) {
+            historyList.innerHTML = '<li>No change history</li>';
+            return;
+          }
+
+          const items = data.history.map(h => {
+            const oldGpmText = h.oldGpm !== null ? h.oldGpm.toFixed(1) : 'config default';
+            const newGpmText = h.newGpm !== null ? h.newGpm.toFixed(1) : 'config default';
+            const reasonText = h.reason ? ` — ${h.reason}` : '';
+            return `<li><strong>${absoluteTime(h.changedAt)}:</strong> ${oldGpmText} → ${newGpmText}${reasonText}</li>`;
+          }).join('');
+
+          historyList.innerHTML = items;
+
+        } catch (err) {
+          console.error('[dashboard] toggleHistory failed:', err);
+          historyList.innerHTML = `<li class="error-text">Error loading history: ${err.message}</li>`;
+        }
+      } else {
+        // Hide
+        historyRow.style.display = 'none';
+      }
     }
 
     // Load dashboard on page load
