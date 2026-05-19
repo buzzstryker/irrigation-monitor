@@ -48,31 +48,35 @@ Phases 0-2 are complete and treated as pre-existing context:
 - ✅ Phase 2: Zone coefficient model, daily target vs actual report
 
 **Active Planning (this GSD effort):**
-- 🔄 Phase 3: Twilio SMS (started, needs completion)
-- ⬜ Phase 4: Take scheduling control via Hydrawise setzone API
+- ⏸️ Phase 3: Twilio SMS (paused, can be resumed)
+- ⬜ Phase 4: Take scheduling control via Hydrawise setzone API (formerly Phase 4b, renumbered after Phase 4a deprecation)
 - ⬜ Phase 5: Observation feedback loop, Kz learning
 - ⬜ Phase 6: Ditch water health check (needs redesign)
 - ⬜ Phase 7: ESP32 tank sensor (~$20 hardware)
 
 ## Current State
 
-**Phase 3 Status: Started - needs completion**
+**Phase 3 Status: Paused**
 - Twilio account created
 - Auth token and phone number need to land in .env
 - SMS integration code structure exists in sms/ directory (handler.js, sender.js, commands.js)
 - Command set defined: STATUS, TANK, SUSPEND, RESUME, SKIP TODAY, DITCH CHECK
 
-**Phase 4 Design Work:**
+**Phase 4a Status: Deprecated (May 2026)**
+- Attribution infrastructure was built but deprecated when investigation revealed Hydrawise REST v1 API does not expose real-time flow data
+- See docs/phase-4a-audit.md for complete audit and CLAUDE.md "Phase 4a History" section for narrative
+- Architecture pivoted to static-GPM configuration in zones.config.js
+
+**Phase 4 Design Work: (formerly Phase 4b)**
 - Scheduling cutover design captured in CLAUDE.md and Project_Context.md
-- flowMeterAttribution mechanism designed: Pool Equipment zones attributed to Garage flow meter via capped Garage Z5 as a gating dummy
-- Serialized valve timeline design: Garage and Pool Equipment share single attribution group
+- Per-zone GPM maintained as static configuration; tank-drawdown calibration when emitter config changes
 
 ## Key Technical Constraints
 
-1. **Pool Equipment flow meter permanently broken** → attribution workaround needed (Pool zones use Garage meter via Z5 gating dummy)
-2. **Hydrawise controllers serialize valves** → one zone per controller at a time, Garage + Pool Equipment share serialized timeline (attribution group)
+1. **Pool Equipment flow meter permanently broken** → Static GPM configuration approach; tank-drawdown calibration when emitter config changes
+2. **Hydrawise controllers serialize valves** → One zone per controller at a time
 3. **Project deliberately outside OneDrive** → SQLite WAL files conflict with OneDrive sync
-4. **Phase 6 ditch health check needs redesign** → capping Garage Z5 closed off planned mechanism
+4. **Phase 6 ditch health check needs redesign** → Original design no longer applicable
 
 ## Reference Documents
 
@@ -92,7 +96,6 @@ Phases 0-2 are complete and treated as pre-existing context:
 
 **Phase 4 (Scheduling Takeover):**
 - setzone API integration
-- Flow meter attribution working (Pool → Garage via Z5)
 - Daily scheduling algorithm with ET-based adjustments
 - Hydrawise program suspension/conflict detection
 - Tank level safety checks
@@ -119,4 +122,6 @@ Phases 0-2 are complete and treated as pre-existing context:
 ---
 
 *Created: 2026-05-11*
+*Last Updated: 2026-05-19*
 *GSD Version: 1.41.2*
+*Phase 4a deprecated May 2026 — see docs/phase-4a-audit.md*

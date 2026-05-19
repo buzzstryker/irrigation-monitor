@@ -1,13 +1,16 @@
 ---
 phase: 4a-attribution-infrastructure
 type: phase-plan
-status: ready
+status: deprecated
 created: 2026-05-11
+deprecated: 2026-05-19
 ---
 
-# Phase 4a: Attribution Infrastructure — Detailed Plan
+> **STATUS: DEPRECATED â€” May 2026.** Phase 4a's infrastructure was built across Waves 1-5 but deprecated when investigation showed Hydrawise REST v1 API does not expose real-time flow data during active zone runs. The attribution mechanism assumed this data would be available; investigation disproved that assumption. See docs/phase-4a-audit.md for complete deprecation audit and CLAUDE.md "Phase 4a History" section for narrative context. This file is preserved as historical record.
 
-**Goal:** Land all schema, config, and module changes required to support flowMeterAttribution. Additive only — no runtime behavior change. Unblocks Phase 4b and the calibration runs that produce accurate Pool Equipment zone GPMs.
+# Phase 4a: Attribution Infrastructure ï¿½ Detailed Plan
+
+**Goal:** Land all schema, config, and module changes required to support flowMeterAttribution. Additive only ï¿½ no runtime behavior change. Unblocks Phase 4b and the calibration runs that produce accurate Pool Equipment zone GPMs.
 
 **Duration:** 3-5 sessions
 **Priority:** High (blocks Phase 4b; accurate Pool Equip GPMs needed before summer scheduling)
@@ -30,7 +33,7 @@ created: 2026-05-11
   - is_healthy: 0 = unhealthy, 1 = healthy (use INTEGER not BOOLEAN for explicit 0/1 storage)
   - One row per controller (state table, not log)
 - [ ] CREATE TABLE controller_flow_meter_health_log (id INTEGER PRIMARY KEY AUTOINCREMENT, controller_id INTEGER NOT NULL, timestamp DATETIME NOT NULL, transitioned_to TEXT NOT NULL, valid_fraction REAL, sample_count INTEGER, reason TEXT)
-  - Logs healthy?unhealthy transitions only (not every health check — only state changes)
+  - Logs healthy?unhealthy transitions only (not every health check ï¿½ only state changes)
   - transitioned_to ? {'healthy', 'unhealthy'}
 - [ ] ALTER TABLE watering_events ADD COLUMN flow_source TEXT NOT NULL DEFAULT 'direct'
   - Values: 'direct' | 'attributed' | 'estimated' | 'ambiguous'
@@ -86,7 +89,7 @@ created: 2026-05-11
 
 **4a.2.2 Add flowMeterAttribution block to POOL_EQUIP**
 - [ ] flowMeterAttribution: {
-      sourceControllerId: 1659477,  // Numeric Hydrawise controller ID — must match the id field on the GARAGE controller config object. String 'GARAGE' would not match at runtime; poll.js and setzone calls use numeric IDs.
+      sourceControllerId: 1659477,  // Numeric Hydrawise controller ID ï¿½ must match the id field on the GARAGE controller config object. String 'GARAGE' would not match at runtime; poll.js and setzone calls use numeric IDs.
       sourceMeterRelay: null,
       gatingRelay: 5,
       gatingZoneName: 'Garage Z5 (capped dummy)',
@@ -95,7 +98,7 @@ created: 2026-05-11
       reason: 'Pool Equip meter unreliable; Pool zones are downstream of Garage flow meter',
       establishedAt: '2026-05-11',
       degradationBehavior: 'estimate',
-      estimateSource: 'zones.config.js gpm field'  // When meter is unhealthy, estimated mode computes gallons = config_gpm × runtime_min using the GPM field on the zone in zones.config.js. This is NOT pure duration-scaling (which is what the Barn controller does because it has no measured GPMs). Pool Equip zones DO have measured GPMs (after calibration), so estimated mode uses those measurements multiplied by runtime.
+      estimateSource: 'zones.config.js gpm field'  // When meter is unhealthy, estimated mode computes gallons = config_gpm ï¿½ runtime_min using the GPM field on the zone in zones.config.js. This is NOT pure duration-scaling (which is what the Barn controller does because it has no measured GPMs). Pool Equip zones DO have measured GPMs (after calibration), so estimated mode uses those measurements multiplied by runtime.
     }
 
 **4a.2.3 Mark Garage Z5 as capped**
@@ -217,7 +220,7 @@ created: 2026-05-11
 
 **4a.4.7 Print recommendation**
 - [ ] Console output: "Calibration complete for {zone_name}. Measured GPM: {avgFlowGPM:.2f} (confidence: {confidence}). Tank cross-check: {tankCrossCheckGPM:.2f} GPM. Recommend updating zones.config.js GPM to {avgFlowGPM:.1f}"
-- [ ] Note: "Does NOT auto-update zones.config.js — human must review and apply"
+- [ ] Note: "Does NOT auto-update zones.config.js ï¿½ human must review and apply"
 
 **4a.4.8 Commit flow-calibration.js**
 - [ ] Commit: "feat(attribution): add flow-calibration.js CLI tool for measuring Pool zone GPMs"
@@ -241,12 +244,12 @@ created: 2026-05-11
 
 **4a.5.1 Update Garage controller table - Z5 row**
 - [ ] Change Z5 row in "Controllers & Zones" section
-- [ ] Old: "Z5 | Dummy Flow Test | System | —"
+- [ ] Old: "Z5 | Dummy Flow Test | System | ï¿½"
 - [ ] New: "Z5 | Attribution Gate (CAPPED) | System | 0.0 (capped 2026-05-11)"
 - [ ] Add footnote: "**Z5 CRITICAL:** Capped and serves as attribution gate for Pool Equipment flow metering. Valve opens for gating signal but cap prevents flow. Self-test on startup verifies cap integrity (<0.3 GPM)."
 
 **4a.5.2 Add flowMeterAttribution to Key Design Decisions**
-- [ ] New entry: "**Pool Equipment flow attribution** — Pool Equipment controller's broken flow meter is worked around by attributing flow to the Garage flow meter. When a Pool zone runs, capped Garage Z5 opens first (providing a gating signal), then the Pool zone opens. The Garage meter's incremental flow is attributed to the Pool zone. This allows accurate GPM measurement and eventual water usage tracking. Garage Z5 is system-critical and must remain capped."
+- [ ] New entry: "**Pool Equipment flow attribution** ï¿½ Pool Equipment controller's broken flow meter is worked around by attributing flow to the Garage flow meter. When a Pool zone runs, capped Garage Z5 opens first (providing a gating signal), then the Pool zone opens. The Garage meter's incremental flow is attributed to the Pool zone. This allows accurate GPM measurement and eventual water usage tracking. Garage Z5 is system-critical and must remain capped."
 
 **4a.5.3 Update Implementation Phases table**
 - [ ] Split Phase 4 row into two rows:
@@ -366,7 +369,7 @@ created: 2026-05-11
 
 **4a.7.2 Make decision (can defer)**
 - [ ] Decision: Choose A or B, or defer to Phase 4b
-- [ ] If deferring: Document in DECISION-pm2-wiring.md: "Deferred to Phase 4b — self-test module is standalone and can be wired later"
+- [ ] If deferring: Document in DECISION-pm2-wiring.md: "Deferred to Phase 4b ï¿½ self-test module is standalone and can be wired later"
 
 **4a.7.3 Implement wiring (if decided now)**
 - [ ] Update selected process file (poll.js or server.js): import runZ5SelfTest, call on startup
@@ -441,7 +444,7 @@ created: 2026-05-11
 - None (Phase 4a is additive, does not depend on Phase 3 SMS completion)
 
 **Blocks:**
-- Phase 4b (Scheduling Cutover) — requires accurate Pool Equipment GPMs and attribution infrastructure
+- Phase 4b (Scheduling Cutover) ï¿½ requires accurate Pool Equipment GPMs and attribution infrastructure
 - Phase 4b runtime attribution logic requires zones.config.js flowMeterAttribution block
 - Summer scheduling needs measured GPMs before ET-based scheduling can begin
 

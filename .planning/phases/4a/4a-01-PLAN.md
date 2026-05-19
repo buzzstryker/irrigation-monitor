@@ -4,6 +4,8 @@ plan: 01
 type: execute
 wave: 1
 depends_on: []
+status: deprecated
+deprecated: 2026-05-19
 files_modified:
   - migrations/migration_flow_attribution.sql
   - migrations/migration_z5_selftest_log.sql
@@ -31,5 +33,7 @@ must_haves:
     - path: "db.js"
       provides: "Updated table count (19 tables)"`n      contains: "19 tables"
 ---
+
+> **STATUS: DEPRECATED — May 2026.** This execution plan was part of Phase 4a, which was deprecated when investigation revealed Hydrawise REST v1 API does not expose real-time flow data. See docs/phase-4a-audit.md and CLAUDE.md "Phase 4a History" section. This file is preserved as historical record.
 
 See full plan content...

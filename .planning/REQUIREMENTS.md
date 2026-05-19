@@ -53,34 +53,46 @@
 
 ---
 
+## Phase 4a: Attribution Infrastructure (DEPRECATED)
+
+**Status: Deprecated as of May 2026.** These requirements were superseded by the architectural change documented in docs/phase-4a-audit.md and CLAUDE.md's "Phase 4a History" section. They are preserved here as historical record.
+
+### Original Requirements (Historical)
+
+**FR4a.1 — Flow Meter Attribution (DEPRECATED)**
+- Pool Equipment zones attributed to Garage flow meter
+- Use capped Garage Z5 (dummy/gating zone) as attribution signal
+- Garage + Pool Equipment share single serialized timeline (attribution group)
+- Track water usage by controller, not by individual zone (Pool Equipment has no meter)
+
+**Why deprecated:** Hydrawise REST v1 API does not expose real-time flow data during active zone runs. The attribution mechanism assumed this data would be available but investigation disproved that assumption.
+
+**Current approach:** Per-zone GPM is maintained as static configuration in zones.config.js. Tank-drawdown calibration (via tank-drawdown-calibration.js) is used when emitter configuration changes.
+
+---
+
 ## Phase 4: Scheduling Takeover (Hydrawise setzone API)
 
 ### Functional Requirements
 
 **FR4.1 — Daily Scheduling Algorithm**
 - Calculate target gallons per zone: baseline × (ET_today / ET_avg) × Kz
-- Convert gallons to runtime: gallons / GPM (flow meter zones) or baseline_minutes × (ET/ET_avg) × Kz (Barn)
+- Convert gallons to runtime: gallons / GPM (zones with configured GPM) or baseline_minutes × (ET/ET_avg) × Kz (Barn)
 - Schedule zones to complete by 6 AM (avoid mid-day evaporation)
 - Enforce tank safety floor: never schedule if tank would drop below 450 gal
 
-**FR4.2 — Flow Meter Attribution**
-- Pool Equipment zones attributed to Garage flow meter
-- Use capped Garage Z5 (dummy/gating zone) as attribution signal
-- Garage + Pool Equipment share single serialized timeline (attribution group)
-- Track water usage by controller, not by individual zone (Pool Equipment has no meter)
-
-**FR4.3 — setzone API Integration**
+**FR4.2 — setzone API Integration**
 - Issue Hydrawise setzone commands to open/close valves
 - Poll zone state every 60s to confirm command execution
 - Log all setzone commands with timestamps and zone IDs
 
-**FR4.4 — Rain/Weather Skip Logic**
+**FR4.3 — Rain/Weather Skip Logic**
 - Skip irrigation if ET < 0.05 in/day
 - Skip if forecast rain > 0.25 in
 - Skip if yesterday rain > 0.5 in
 - Skip if forecast high temp < 68°F
 
-**FR4.5 — Program Suspension & Conflict Detection**
+**FR4.4 — Program Suspension & Conflict Detection**
 - Suspend all Hydrawise programs when Phase 4 takes control
 - Daily check: verify programs still suspended
 - Alert if Hydrawise program re-enabled (conflict detection)
@@ -228,4 +240,5 @@
 
 ---
 
-*Last updated: 2026-05-11*
+*Last updated: 2026-05-19*
+*Phase 4a deprecated May 2026 — see docs/phase-4a-audit.md*
