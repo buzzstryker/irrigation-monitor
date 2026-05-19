@@ -150,7 +150,7 @@ Lenovo (always on)
 
 ## Optimized Static Schedule (baseline before Phase 4)
 
-This is the manually-entered Hydrawise schedule to use until Phase 4b takes control.
+This is the manually-entered Hydrawise schedule to use until Phase 4 takes control.
 
 ### Summer (Apr 15 – Oct 15) — 1,398.6 gal/day
 
