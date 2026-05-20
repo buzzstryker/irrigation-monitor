@@ -5,13 +5,12 @@
  * controllers (Garage, Pool Equipment, Barn). Logs zone state transitions,
  * calculates tank level, detects watering events, and warns on low tank.
  *
- * Uses better-sqlite3 via getDb() from db.js.
+ * Phase 4: Uses Supabase client (async API) instead of better-sqlite3.
  */
 
 require('dotenv').config();
 
-const { getDb } = require('./db');
-const { syncAll } = require('./sync');
+const { supabase } = require('./db');
 const { controllers, tank } = require('./zones.config');
 
 const API_KEY = process.env.HYDRAWISE_API_KEY;
@@ -128,10 +127,9 @@ function parseRelays(apiData, ctrlConfig) {
 
 /**
  * Process zone states from one poll cycle.
- * Detects on→off and off→on transitions, logs to DB.
+ * Detects on→off and off→on transitions, logs to Supabase (async).
  */
-function processZoneStates(zones) {
-  const db = getDb();
+async function processZoneStates(zones) {
   const now = Math.floor(Date.now() / 1000);
 
   for (const z of zones) {
@@ -143,12 +141,22 @@ function processZoneStates(zones) {
       // Zone just turned ON
       zoneState[key] = { on: true, startedAt: now };
 
-      db.prepare(
-        `INSERT INTO zone_state_log (controller, zone_id, relay_id, state, run_seconds, flow_gpm)
-         VALUES (?, ?, ?, 'on', ?, ?)`
-      ).run(z.controller, z.zone_id, z.relay_id, z.run_seconds, z.flow || null);
+      const { error } = await supabase
+        .from('zone_state_log')
+        .insert({
+          controller: z.controller,
+          zone_id: z.zone_id,
+          relay_id: z.relay_id,
+          state: 'on',
+          run_seconds: z.run_seconds,
+          flow_gpm: z.flow || null
+        });
 
-      console.log(`[POLL] ${z.controller} ${z.zone_id} (${z.name}) → ON`);
+      if (error) {
+        console.error(`[POLL] Error logging zone ON: ${error.message}`);
+      } else {
+        console.log(`[POLL] ${z.controller} ${z.zone_id} (${z.name}) → ON`);
+      }
 
     } else if (!isOn && prev && prev.on) {
       // Zone just turned OFF — record watering event
@@ -157,17 +165,42 @@ function processZoneStates(zones) {
 
       zoneState[key] = { on: false, startedAt: null };
 
-      db.prepare(
-        `INSERT INTO zone_state_log (controller, zone_id, relay_id, state, run_seconds, flow_gpm)
-         VALUES (?, ?, ?, 'off', 0, ?)`
-      ).run(z.controller, z.zone_id, z.relay_id, z.flow || null);
+      // Log OFF state
+      const { error: offError } = await supabase
+        .from('zone_state_log')
+        .insert({
+          controller: z.controller,
+          zone_id: z.zone_id,
+          relay_id: z.relay_id,
+          state: 'off',
+          run_seconds: 0,
+          flow_gpm: z.flow || null
+        });
 
-      db.prepare(
-        `INSERT INTO watering_events (controller, zone_id, relay_id, duration_seconds, gallons, flow_gpm, source)
-         VALUES (?, ?, ?, ?, ?, ?, 'scheduled')`
-      ).run(z.controller, z.zone_id, z.relay_id, duration, gallons, z.flow || null);
+      if (offError) {
+        console.error(`[POLL] Error logging zone OFF: ${offError.message}`);
+      }
 
-      console.log(`[POLL] ${z.controller} ${z.zone_id} (${z.name}) → OFF | ${duration}s | ${gallons ? gallons.toFixed(1) : '?'} gal`);
+      // Log watering event
+      const { error: eventError } = await supabase
+        .from('watering_events')
+        .insert({
+          controller: z.controller,
+          zone_id: z.zone_id,
+          relay_id: z.relay_id,
+          duration_seconds: duration,
+          gallons: gallons,
+          flow_gpm: z.flow || null,
+          source: 'scheduled',
+          flow_source: 'calculated',
+          flow_quality: 'calculated'
+        });
+
+      if (eventError) {
+        console.error(`[POLL] Error logging watering event: ${eventError.message}`);
+      } else {
+        console.log(`[POLL] ${z.controller} ${z.zone_id} (${z.name}) → OFF | ${duration}s | ${gallons ? gallons.toFixed(1) : '?'} gal`);
+      }
     }
   }
 }
@@ -175,10 +208,9 @@ function processZoneStates(zones) {
 /**
  * Update the running tank level estimate.
  * Subtract water used by running zones, add ditch fill rate.
- * Log to tank_level_log.
+ * Log to tank_level_log (async).
  */
-function updateTankLevel(zones) {
-  const db = getDb();
+async function updateTankLevel(zones) {
   const intervalMin = POLL_INTERVAL_MS / 60_000;
 
   // Water consumed by all running zones this interval
@@ -200,29 +232,54 @@ function updateTankLevel(zones) {
   tankLevel = Math.min(tank.usable_gal, Math.max(0, tankLevel - consumed + filled));
 
   // Log tank level
-  db.prepare(
-    `INSERT INTO tank_level_log (level_gallons, source)
-     VALUES (?, 'calculated')`
-  ).run(Math.round(tankLevel * 10) / 10);
+  const { error: tankError } = await supabase
+    .from('tank_level_log')
+    .insert({
+      level_gallons: Math.round(tankLevel * 10) / 10,
+      source: 'calculated'
+    });
+
+  if (tankError) {
+    console.error(`[POLL] Error logging tank level: ${tankError.message}`);
+  }
 
   // Warn if tank is low
   if (tankLevel < tank.low_warning_gal) {
-    const existing = db.prepare(
-      `SELECT id FROM warnings WHERE type = 'low_tank' AND resolved = 0`
-    ).get();
+    const { data: existing, error: checkError } = await supabase
+      .from('warnings')
+      .select('id')
+      .eq('type', 'low_tank')
+      .eq('resolved', 0)
+      .limit(1);
 
-    if (!existing) {
-      db.prepare(
-        `INSERT INTO warnings (type, message, resolved)
-         VALUES ('low_tank', ?, 0)`
-      ).run(`Tank level critically low: ${Math.round(tankLevel)} gal (threshold: ${tank.low_warning_gal} gal)`);
-      console.warn(`[POLL] ⚠ TANK LOW: ${Math.round(tankLevel)} gal`);
+    if (checkError) {
+      console.error(`[POLL] Error checking warnings: ${checkError.message}`);
+    } else if (!existing || existing.length === 0) {
+      const { error: warnError } = await supabase
+        .from('warnings')
+        .insert({
+          type: 'low_tank',
+          message: `Tank level critically low: ${Math.round(tankLevel)} gal (threshold: ${tank.low_warning_gal} gal)`,
+          resolved: 0
+        });
+
+      if (warnError) {
+        console.error(`[POLL] Error creating warning: ${warnError.message}`);
+      } else {
+        console.warn(`[POLL] ⚠ TANK LOW: ${Math.round(tankLevel)} gal`);
+      }
     }
   } else {
     // Resolve low tank warning if level recovered
-    db.prepare(
-      `UPDATE warnings SET resolved = 1 WHERE type = 'low_tank' AND resolved = 0`
-    ).run();
+    const { error: resolveError } = await supabase
+      .from('warnings')
+      .update({ resolved: 1 })
+      .eq('type', 'low_tank')
+      .eq('resolved', 0);
+
+    if (resolveError) {
+      console.error(`[POLL] Error resolving warning: ${resolveError.message}`);
+    }
   }
 }
 
@@ -233,52 +290,47 @@ function updateTankLevel(zones) {
 let pollCount = 0;
 
 async function poll() {
-  pollCount++;
-  const db = getDb();
+  try {
+    pollCount++;
 
-  // Discover controller IDs on first poll
-  if (!controllerMap) {
-    controllerMap = await discoverControllers();
+    // Discover controller IDs on first poll
     if (!controllerMap) {
-      console.warn('[POLL] Could not discover controllers — will retry next cycle');
-      updateTankLevel([]);
-      return;
-    }
-  }
-
-  let allZones = [];
-
-  // Poll each controller separately
-  for (const ctrl of controllers) {
-    const ctrlId = controllerMap[ctrl.name];
-    if (!ctrlId) {
-      // Controller not found in Hydrawise account (e.g. Barn not yet registered)
-      continue;
+      controllerMap = await discoverControllers();
+      if (!controllerMap) {
+        console.warn('[POLL] Could not discover controllers — will retry next cycle');
+        await updateTankLevel([]);
+        return;
+      }
     }
 
-    const data = await fetchStatus(ctrlId);
-    if (!data) continue;
+    let allZones = [];
 
-    const zones = parseRelays(data, ctrl);
-    allZones = allZones.concat(zones);
-  }
+    // Poll each controller separately
+    for (const ctrl of controllers) {
+      const ctrlId = controllerMap[ctrl.name];
+      if (!ctrlId) {
+        // Controller not found in Hydrawise account (e.g. Barn not yet registered)
+        continue;
+      }
 
-  processZoneStates(allZones);
-  updateTankLevel(allZones);
+      const data = await fetchStatus(ctrlId);
+      if (!data) continue;
 
-  // Log every poll on first cycle, then every 5 minutes
-  const running = allZones.filter(z => z.running);
-  if (pollCount === 1 || pollCount % 5 === 0) {
-    console.log(`[POLL] Cycle #${pollCount} | Tank: ${Math.round(tankLevel)} gal | Zones polled: ${allZones.length} | Running: ${running.length}`);
-  }
-
-  // Periodic sync to Supabase (every 5 minutes)
-  if (pollCount % 5 === 0) {
-    try {
-      await syncAll();
-    } catch (err) {
-      console.error(`[POLL] Sync error: ${err.message}`);
+      const zones = parseRelays(data, ctrl);
+      allZones = allZones.concat(zones);
     }
+
+    await processZoneStates(allZones);
+    await updateTankLevel(allZones);
+
+    // Log every poll on first cycle, then every 5 minutes
+    const running = allZones.filter(z => z.running);
+    if (pollCount === 1 || pollCount % 5 === 0) {
+      console.log(`[POLL] Cycle #${pollCount} | Tank: ${Math.round(tankLevel)} gal | Zones polled: ${allZones.length} | Running: ${running.length}`);
+    }
+  } catch (err) {
+    console.error(`[POLL] Poll cycle error: ${err.message}`);
+    console.error(err.stack);
   }
 }
 
@@ -286,7 +338,7 @@ async function poll() {
 // Startup
 // ──────────────────────────────────────────────
 
-console.log('[POLL] Hydrawise polling service starting');
+console.log('[POLL] Hydrawise polling service starting (Supabase mode)');
 console.log(`[POLL] Controllers: ${controllers.map(c => c.name).join(', ')}`);
 console.log(`[POLL] Poll interval: ${POLL_INTERVAL_MS / 1000}s`);
 console.log(`[POLL] API key: ${API_KEY ? 'loaded (' + API_KEY.length + ' chars)' : 'NOT SET'}`);
@@ -294,9 +346,6 @@ console.log(`[POLL] API key: ${API_KEY ? 'loaded (' + API_KEY.length + ' chars)'
 if (!API_KEY) {
   console.warn('[POLL] HYDRAWISE_API_KEY not set in .env — will poll but get no data');
 }
-
-// Initialize DB
-getDb();
 
 // First poll immediately, then every 60s
 poll();

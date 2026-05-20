@@ -31,7 +31,7 @@
  *   node tank-drawdown-calibration.js --zone barn-z1 --duration 180
  */
 
-const { getDb } = require('./db');
+const { supabase } = require('./db');
 const hydrawise = require('./hydrawise-api');
 const zonesConfig = require('./zones.config');
 
@@ -103,7 +103,6 @@ async function runCalibration(options = {}) {
     throw new Error('zoneSpec required (e.g., "garage-z2", "pool-equip-z1")');
   }
 
-  const db = getDb();
   const zone = parseZoneSpec(zoneSpec);
 
   console.log(`[CALIBRATION] Target: ${zone.controllerName} ${zone.zoneId} (${zone.zoneName})`);
@@ -142,11 +141,16 @@ async function runCalibration(options = {}) {
   // -------------------------------------------------------------
 
   // Gate 1: Tank model must be healthy (recent data)
-  const latestTankReading = db.prepare(`
-    SELECT level_gallons, timestamp FROM tank_level_log
-    ORDER BY timestamp DESC
-    LIMIT 1
-  `).get();
+  const { data: latestTankReading, error: tankReadError } = await supabase
+    .from('tank_level_log')
+    .select('level_gallons, timestamp')
+    .order('timestamp', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (tankReadError) {
+    throw new Error(`Error reading tank level: ${tankReadError.message}`);
+  }
 
   if (!latestTankReading) {
     throw new Error('No tank level data found - tank model not initialized');
@@ -168,13 +172,18 @@ async function runCalibration(options = {}) {
   console.log(`[CALIBRATION] Tank headroom OK - current level ${tankLevel.toFixed(0)} gal`);
 
   // Gate 3: No other zones should be active (CRITICAL for drawdown isolation)
-  const activeZones = db.prepare(`
-    SELECT controller, zone_id FROM zone_state_log
-    WHERE state = 'on'
-      AND timestamp >= datetime('now', '-5 minutes')
-  `).all();
+  const fiveMinutesAgo = Math.floor(Date.now() / 1000) - 300;
+  const { data: activeZones, error: activeError } = await supabase
+    .from('zone_state_log')
+    .select('controller, zone_id')
+    .eq('state', 'on')
+    .gte('timestamp', fiveMinutesAgo);
 
-  if (activeZones.length > 0) {
+  if (activeError) {
+    throw new Error(`Error checking active zones: ${activeError.message}`);
+  }
+
+  if (activeZones && activeZones.length > 0) {
     const activeList = activeZones.map(z => `${z.controller} ${z.zone_id}`).join(', ');
     throw new Error(`Active zones detected: ${activeList}. Tank-drawdown requires ONE zone at a time.`);
   }
@@ -188,11 +197,16 @@ async function runCalibration(options = {}) {
   console.log('[CALIBRATION] Starting measurement sequence...');
 
   // Step 1: Capture tank level at t0
-  const t0_reading = db.prepare(`
-    SELECT level_gallons, timestamp FROM tank_level_log
-    ORDER BY timestamp DESC
-    LIMIT 1
-  `).get();
+  const { data: t0_reading, error: t0Error } = await supabase
+    .from('tank_level_log')
+    .select('level_gallons, timestamp')
+    .order('timestamp', { ascending: false })
+    .limit(1)
+    .single();
+
+  if (t0Error) {
+    throw new Error(`Error reading t0 tank level: ${t0Error.message}`);
+  }
 
   const t0_level = t0_reading.level_gallons;
   const t0_timestamp = t0_reading.timestamp;
@@ -232,11 +246,16 @@ async function runCalibration(options = {}) {
   await new Promise(resolve => setTimeout(resolve, waitMs));
 
   // Step 4: Capture tank level at t1
-  const t1_reading = db.prepare(`
-    SELECT level_gallons, timestamp FROM tank_level_log
-    ORDER BY timestamp DESC
-    LIMIT 1
-  `).get();
+  const { data: t1_reading, error: t1Error } = await supabase
+    .from('tank_level_log')
+    .select('level_gallons, timestamp')
+    .order('timestamp', { ascending: false })
+    .limit(1)
+    .single();
+
+  if (t1Error) {
+    throw new Error(`Error reading t1 tank level: ${t1Error.message}`);
+  }
 
   const t1_level = t1_reading.level_gallons;
   const t1_timestamp = t1_reading.timestamp;
@@ -294,22 +313,23 @@ async function runCalibration(options = {}) {
   const notes = `Tank-drawdown calibration. Elapsed: ${elapsed_min.toFixed(2)} min. ` +
     `Config GPM: ${configuredGpm !== null && configuredGpm !== undefined ? configuredGpm.toFixed(1) : 'N/A'}`;
 
-  db.prepare(`
-    INSERT INTO flow_calibration_log (
-      timestamp, controller_id, zone_relay, duration_sec,
-      tank_gpm, tank_drawdown_gal, ditch_fill_gal, notes
-    ) VALUES (datetime('now'), ?, ?, ?, ?, ?, ?, ?)
-  `).run(
-    zone.controllerId,
-    zone.zoneRelay,
-    Math.round(elapsed_sec),
-    measured_gpm,
-    tank_drawdown_gal,
-    ditch_fill_gal,
-    notes
-  );
+  const { error: logError } = await supabase
+    .from('flow_calibration_log')
+    .insert({
+      controller_id: zone.controllerId,
+      zone_relay: zone.zoneRelay,
+      duration_sec: Math.round(elapsed_sec),
+      tank_gpm: measured_gpm,
+      tank_drawdown_gal,
+      ditch_fill_gal,
+      notes
+    });
 
-  console.log('[CALIBRATION] Logged to flow_calibration_log');
+  if (logError) {
+    console.error('[CALIBRATION] Error logging to flow_calibration_log:', logError.message);
+  } else {
+    console.log('[CALIBRATION] Logged to flow_calibration_log');
+  }
   console.log('');
   console.log('[CALIBRATION] === RECOMMENDATION ===');
   console.log(`Update zones.config.js:`);

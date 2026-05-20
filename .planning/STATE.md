@@ -3,7 +3,7 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: paused
-last_updated: "2026-05-19T16:45:39.864Z"
+last_updated: "2026-05-20T14:16:28.998Z"
 progress:
   total_phases: 6
   completed_phases: 0
@@ -12,7 +12,7 @@ progress:
   percent: 0
 ---
 
-﻿# State — irrigation-monitor
+# State — irrigation-monitor
 
 **Last Updated:** 2026-05-19
 **GSD Version:** 1.41.2

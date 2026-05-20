@@ -25,7 +25,7 @@ async function runEtUpdate() {
   // 1. Fetch and store yesterday's actual ET
   try {
     const yesterday = await getYesterdayActual();
-    upsertEtLog(yesterday);
+    await upsertEtLog(yesterday);
     console.log(formatLog(yesterday));
 
     // Check skip conditions using yesterday's data
@@ -42,7 +42,7 @@ async function runEtUpdate() {
   try {
     const forecasts = await getForecast();
     for (const fc of forecasts) {
-      upsertEtLog(fc);
+      await upsertEtLog(fc);
       console.log(formatLog(fc));
     }
 
