@@ -4,6 +4,8 @@
 **Status:** Research only — no implementation has been done  
 **Companion to:** docs/hydrawise-api-flow-fields.md (the parallel Hydrawise investigation)
 
+> **Sensor model update (2026-05-20):** Originally researched against the Moray ME202W (submersible, 10m). Switched to Scottsensors SC01W (ultrasonic, IP66) due to 6-week lead time on the Moray. Both are Tuya/Smart Life ecosystem devices — the integration architecture, API approach, and setup checklist in this document apply unchanged. Device-specific differences (mounting style — submersible vs ultrasonic top-mounted, range, power requirements) will be verified during physical setup. The SC01W is being ordered; the Moray order status is pending decision (cancel or keep as backup).
+
 ---
 
 ## Executive Summary
@@ -1168,6 +1170,21 @@ For irrigation-monitor tank (from existing config):
 2. **Depth:** Lower tape measure from tank opening to bottom; subtract any sludge/sediment layer
 3. **Sensor Offset:** After installing ME202W, measure from tank rim to sensor face (should be ~6 inches per ME202W manual)
 
+### Sensor Mounting Style Differences
+
+**For ultrasonic top-mounted sensors (like SC01W):**
+- The sensor reports distance from sensor head to water surface
+- Tank capacity in gallons = function of (tank cross-section × current water depth)
+- Current water depth = (sensor mounting offset from tank top) - (reported distance)
+- Calibration: take readings at multiple known water levels post-install
+
+**For submersible sensors (like ME202W):**
+- The sensor reports water depth directly
+- Simpler conversion (no mounting offset calculation required)
+- Not relevant if SC01W is the chosen device
+
+---
+
 ### Conversion Formula
 
 **Step 1: Sensor Reading to Water Height**
@@ -1267,7 +1284,7 @@ function convertSensorToGallons_empirical(liquid_depth_cm) {
 
 ### Prerequisites (Before Starting)
 
-- [ ] **1.1** ME202W 10m sensor ordered and received (~$60, 2-3 day shipping)
+- [ ] **1.1** ME202W ordered (6-week lead time; superseded — see top of doc) OR Scottsensors SC01W ordered (faster delivery, same Tuya integration). Mounting style differs: SC01W is ultrasonic top-mount; ME202W is submersible. Phase 4 calibration math will depend on which physical sensor is installed.
 - [ ] **1.2** WiFi confirmed available at tank location (2.4GHz network, signal strength >-70 dBm)
 - [ ] **1.3** Power outlet available at tank (ME202W requires AC/DC adapter, ~6 ft cable)
 - [ ] **1.4** Tank geometry documented: diameter, depth, sensor mounting location planned
