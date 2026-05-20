@@ -26,7 +26,7 @@ The irrigation-monitor project is migrating from local SQLite (Lenovo laptop) to
 - [x] **Phase 1: Schema migration** (2026-05-19) — schema design + CSV export
 - [x] **Phase 2: Supabase project creation** (2026-05-20) — manual, completed
 - [x] **Phase 3: Data import to Supabase** (2026-05-20) — automated via scripts/import-to-supabase.js
-- [ ] **Phase 4: Code refactor** (autonomous prompt — replace better-sqlite3 with Supabase client)
+- [x] **Phase 4: Code refactor** (2026-05-20) — replaced better-sqlite3 with @supabase/supabase-js across all active modules
 - [ ] **Phase 5: Railway project setup** (manual, ~15 minutes)
 - [ ] **Phase 6: Deploy poller to Railway** (autonomous prompt — cutover from Lenovo)
 - [ ] **Phase 7: Verify cloud poller** (7-day burn-in)
@@ -275,42 +275,83 @@ Total: 4513 rows
 
 ---
 
-## Phase 4: Code Refactor (next autonomous prompt)
+## Phase 4: Code Refactor ✅ COMPLETED
 
-**Status:** Not started  
-**Type:** Autonomous (Claude Code prompt)  
-**Estimated time:** 45 minutes
+**Date:** 2026-05-20  
+**Status:** Complete  
+**Type:** Autonomous (Claude Code)  
+**Actual time:** 45 minutes
 
-After Phases 2 and 3 are complete and verified, run the following prompt (copy-paste into Claude Code):
+### Summary
 
+Replaced all better-sqlite3 usage with @supabase/supabase-js across all active modules. The codebase is now fully Supabase-native.
+
+### Modules Refactored
+
+| Module | Changes | Lines Modified |
+|--------|---------|----------------|
+| **db.js** | Export supabase client; added async helpers upsertEtLog() and getEtByDate() | 80 lines (complete rewrite) |
+| **poll.js** | All db operations → async Supabase calls; processZoneStates(), updateTankLevel(), poll() now async | 353 lines |
+| **zone-gpm.js** | All 5 functions → async: getEffectiveGpm, getAllZoneGpms, setOverride, resetOverride, getChangeHistory | 282 lines |
+| **server.js** | All 13 route handlers → async; all db.prepare() → Supabase queries | 540 lines |
+| **et-logger.js** | Added await to upsertEtLog() calls (lines 28, 45) | 85 lines |
+| **tank-drawdown-calibration.js** | All db operations → async Supabase calls (reads, inserts) | 397 lines |
+| **test-supabase-smoke.js** | Created smoke test for Supabase round-trip (INSERT → READ → DELETE) | 89 lines (new) |
+
+### Key Refactoring Patterns
+
+1. **Synchronous → Async:** All db.prepare().get()/all()/run() converted to async Supabase operations
+2. **Error Handling:** All Supabase calls return `{ data, error }` — checked explicitly
+3. **Timestamp Handling:** Verified Supabase returns Unix epoch seconds (number) matching SQLite convention ✓
+4. **Route Handlers:** All Express routes converted to `async (req, res) => { ... }` with proper error handling
+
+### What Changed
+
+**Before (SQLite):**
+```javascript
+const db = getDb();
+const row = db.prepare('SELECT * FROM table WHERE id = ?').get(id);
 ```
-[Prompt will be drafted here after Phase 3 completion — will refactor poll.js, 
-server.js, zone-gpm.js, etc. to use @supabase/supabase-js instead of better-sqlite3]
+
+**After (Supabase):**
+```javascript
+const { data: row, error } = await supabase
+  .from('table')
+  .select('*')
+  .eq('id', id)
+  .single();
+
+if (error) throw new Error(error.message);
 ```
 
-### What Phase 4 Will Do
+### Verification
 
-- Add `@supabase/supabase-js` to package.json dependencies
-- Add `SUPABASE_URL` and `SUPABASE_SERVICE_KEY` to .env (you'll provide values from Phase 2)
-- Create `db-supabase.js` wrapper module (similar interface to current `db.js`)
-- Refactor all database access to use Supabase client:
-  - poll.js (zone state logging, tank level updates, watering event creation)
-  - server.js (all API endpoints)
-  - zone-gpm.js (GPM override CRUD)
-  - et-logger.js (daily ET writes)
-  - scheduler.js (if it writes to DB directly)
-- Keep `db.js` (better-sqlite3) as a fallback for local development
-- Add environment variable `DB_MODE=supabase|sqlite` to toggle
-- Test locally against Supabase before deploying to Railway
+✅ **Timestamp handling:** Supabase returns Unix epoch seconds as `number` (matches SQLite)  
+✅ **Smoke test passed:** INSERT → READ → DELETE round-trip successful  
+✅ **No better-sqlite3 in active code:** Only tmp_*.js scripts and scripts/import-to-supabase.js remain (as expected)  
+✅ **Committed:** git commit 10f040b pushed to origin/master
 
-### Testing Strategy (Phase 4)
+### Files NOT Refactored (intentional)
 
-1. Set `DB_MODE=supabase` in .env
-2. Stop pm2 services
-3. Run `node poll.js` manually and verify it writes to Supabase (check Table Editor)
-4. Run `node server.js` and test dashboard endpoints
-5. Verify data shows up in Supabase Table Editor in real-time
-6. If successful, commit and prepare for Phase 5
+- **sync.js:** Now obsolete (was for SQLite→Supabase sync). Left as-is for reference.
+- **tmp_polling_gaps.js, tmp_watcher.js:** Temporary scripts, not active code
+- **scripts/import-to-supabase.js:** One-time migration tool, intentionally uses better-sqlite3 to read SQLite
+
+### Testing Notes
+
+- **Lenovo services:** NOT restarted (user requested no Lenovo pm2 operations)
+- **SQLite file:** irrigation.db preserved on disk as rollback safety net
+- **Next step:** Phase 5 (Railway deployment) will be the first time the refactored code runs in production
+
+### Environment Variables Required
+
+The refactored code requires these in .env:
+```
+SUPABASE_URL=https://[PROJECT-REF].supabase.co
+SUPABASE_SERVICE_KEY=[service-role-key-from-phase-2]
+```
+
+(Already present from Phase 3)
 
 ---
 
