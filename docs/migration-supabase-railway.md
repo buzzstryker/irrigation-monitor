@@ -23,9 +23,9 @@ The irrigation-monitor project is migrating from local SQLite (Lenovo laptop) to
 
 ## Migration Phases
 
-- [x] **Phase 1: Schema migration** (2026-05-19) — this session
-- [ ] **Phase 2: Supabase project creation** (manual, ~10 minutes)
-- [ ] **Phase 3: Data import to Supabase** (manual via Studio UI, ~30 minutes)
+- [x] **Phase 1: Schema migration** (2026-05-19) — schema design + CSV export
+- [x] **Phase 2: Supabase project creation** (2026-05-20) — manual, completed
+- [x] **Phase 3: Data import to Supabase** (2026-05-20) — automated via scripts/import-to-supabase.js
 - [ ] **Phase 4: Code refactor** (autonomous prompt — replace better-sqlite3 with Supabase client)
 - [ ] **Phase 5: Railway project setup** (manual, ~15 minutes)
 - [ ] **Phase 6: Deploy poller to Railway** (autonomous prompt — cutover from Lenovo)
@@ -151,7 +151,37 @@ The irrigation-monitor project is migrating from local SQLite (Lenovo laptop) to
 
 ---
 
-## Phase 3: Data Import (MANUAL — your turn)
+## Phase 3: Data Import ✅ COMPLETED
+
+**Date:** 2026-05-20  
+**Status:** Complete  
+**Method:** Automated via scripts/import-to-supabase.js (not manual Studio UI as originally planned)
+
+### Summary
+
+Programmatic import of all CSV data from `migrations/data_export/` to Supabase using @supabase/supabase-js client:
+
+- **Total rows imported:** 4,513 across 16 tables
+- **Import time:** ~30 seconds
+- **Method:** Batch inserts of 500 rows per request
+- **Verification:** All row counts match MANIFEST.txt ✓
+
+### Tables Imported
+
+| Table | Rows | Status |
+|-------|------|--------|
+| tank_level_log | 4,331 | ✓ |
+| zone_daily_analysis | 44 | ✓ |
+| ditch_health_log | 37 | ✓ |
+| watering_events | 26 | ✓ |
+| zone_state_log | 52 | ✓ |
+| zone_coefficients | 22 | ✓ |
+| et_log | 1 | ✓ |
+| *9 empty tables* | 0 | ✓ (schema only) |
+
+### Original Manual Process (archived)
+
+**Note:** The original plan was manual CSV upload via Supabase Studio UI. We automated it instead with a one-time import script for speed and repeatability.
 
 **Estimated time:** 30 minutes (mostly waiting for uploads)  
 **Prerequisites:** Phase 2 completed successfully
