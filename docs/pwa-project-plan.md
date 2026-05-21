@@ -75,48 +75,27 @@ Supabase OTP via 6-digit code (email or SMS). After verification:
 
 This means RLS policies need to be configured on the relevant tables (tank_level_log, watering_events, zone_state_log) to allow authenticated users to read their data. We currently have RLS enabled but no policies, which means the publishable key reads nothing — which is correct default-closed behavior.
 
-### Authentication lessons from prior project (Windex / Late Add v2)
+### Authentication
 
-**Context:** The Windex project (Late Add v2, Supabase + Expo + Vercel, late 2025 through mid-2026) encountered a category of auth bugs related to magic links that disappeared entirely when switching to OTP codes. The lessons are directly applicable to this PWA.
+This project follows the cross-project auth standards in
+`C:\Users\buzzs\Desktop\Projects\Buzz_Project_Development_Procedure.md`,
+sections 2.2b through 2.2d. Required reading before implementing Phase C.
 
-**TL;DR from Windex:**
-- Magic links and OTP codes look interchangeable in Supabase's UI but behave very differently in web deployments
-- Magic links create URL fragment parsing bugs, router race conditions, and single-use device-binding failures
-- OTP codes (user types a 6-digit code from email) eliminate the entire category of URL handoff problems
-- **Four prevention items that belong in Phase C from day one:**
-  1. Use 6-digit OTP codes, not magic links
-  2. Capture any incoming auth params at module load, before the router mounts and strips them
-  3. Add a grace period (30s starting value) before 401s trigger signout
-  4. Edge functions called from contexts without a JWT need `--no-verify-jwt`
+**Project-specific decisions:**
+- Delivery channel: email (not SMS — no Twilio dependency)
+- OTP length: 6 digits (Supabase default; UI validates 6–8 via tolerant
+  pattern per section 2.2b)
+- Onboarding: solo user for now, so `admin.createUser` bulk provisioning
+  isn't needed. Single-user signup via OTP code flow.
 
-**Why magic links failed on Windex:**
-- Expo Router (and Next.js App Router to a lesser extent) strips URL fragments before auth code can read them
-- Session handoff became racy — setting session then navigating sometimes lost the session
-- Magic links are single-use and device-bound; clicking on phone when you wanted laptop = recovery failure
-- iOS Mail "preview" consumed links before user clicked them
-
-**Why OTP codes work:**
-- No URL handoff means no router involvement; code is just a string the user types
-- No single-use device binding; user can request code on one device and enter on another
-- Failures are visible and recoverable (wrong code → clear error, expired code → request new one)
-- Stable on Windex for months after the switch
-
-**Subtler bugs that survived the OTP switch:**
-- **Auth code captured too late:** Even with OTP, password recovery and OAuth callbacks emit codes in URLs. Fix: capture URL params at module load (before React/router mounts) in a bootstrap file.
-- **Spurious 401s triggering signout:** Supabase sessions can momentarily return 401 during token refresh or network blips. Fix: add 30s grace period before treating 401 as "session dead."
-- **Edge functions 401-looping:** Functions called from webhooks/cron/public endpoints without a user JWT need `--no-verify-jwt` or they 401-loop silently.
-
-**Cross-cutting principle (applies beyond auth):** Prefer flows that don't depend on URL handoffs in a Next.js + Vercel deployment. Router behavior, browser URL normalization, and fragment handling interact in hard-to-debug ways. Anything you can do in-app (code entry, manual paste, in-app navigation) is more robust than anything that crosses an `https://...?token=...` boundary.
-
-**Windex project checklist (transplanted to this project):**
-1. Set Supabase email template to OTP, not magic link
-2. Build a code-entry form, not a "check your email and click the link" screen
-3. Capture URL params at module load in a bootstrap file (required for password recovery flows)
-4. Wrap 401 handler in a grace period before triggering signout (30s starting value)
-5. Audit edge functions for JWT verification needs
-6. Test on Safari early (Chrome is forgiving about fragment timing; Safari isn't)
-
-These six items are integrated into Phase C below.
+**Phase C implementation checklist** (per section 2.2d pre-launch checklist):
+- [ ] Email template uses `{{ .Token }}`, not `{{ .ConfirmationURL }}`
+- [ ] `auth-bootstrap.ts` captures `window.location.href` at module load
+- [ ] Login UI validates `\d{6,8}` with `maxLength={8}`
+- [ ] 401 handler has 30s grace period before signout
+- [ ] Edge Functions called without a JWT deployed with `--no-verify-jwt`
+- [ ] `/login` page sets `dynamic = 'force-dynamic'` and `revalidate = 0`
+- [ ] Tested on iOS Safari before launch
 
 ## Required Supabase setup (manual, before code work)
 - Enable Supabase Auth and pick OTP provider (email or SMS)
