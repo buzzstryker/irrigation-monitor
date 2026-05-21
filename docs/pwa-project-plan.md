@@ -12,7 +12,7 @@ Status: Planning. No code exists yet.
 - UI: shadcn/ui + Tailwind CSS
 - PWA: next-pwa
 - Data: @supabase/supabase-js (the publishable anon key, NOT the service key — this is client-side)
-- Auth: Supabase OTP (magic link via email, or SMS if simpler)
+- Auth: Supabase OTP (6-digit code via email, NOT magic links)
 - Hosting: Vercel (free tier sufficient for one user)
 - Domain: Vercel-provided subdomain (e.g., irrigation-monitor-app.vercel.app); no custom domain for v1
 
@@ -66,7 +66,7 @@ Both the Lenovo desktop dashboard and the PWA read from the same Supabase databa
 The PWA does NOT have its own backend code. It's a static Next.js app that talks directly to Supabase from the browser using the publishable (anon) key with Row Level Security policies controlling access.
 
 ## Authentication & Security
-Supabase OTP via email or SMS magic link. After verification:
+Supabase OTP via 6-digit code (email or SMS). After verification:
 - Supabase issues a session token stored in browser
 - The token authenticates subsequent queries (still subject to RLS)
 - Session persists until user logs out or token expires
@@ -75,11 +75,57 @@ Supabase OTP via email or SMS magic link. After verification:
 
 This means RLS policies need to be configured on the relevant tables (tank_level_log, watering_events, zone_state_log) to allow authenticated users to read their data. We currently have RLS enabled but no policies, which means the publishable key reads nothing — which is correct default-closed behavior.
 
+### Authentication lessons from prior project (Windex / Late Add v2)
+
+**Context:** The Windex project (Late Add v2, Supabase + Expo + Vercel, late 2025 through mid-2026) encountered a category of auth bugs related to magic links that disappeared entirely when switching to OTP codes. The lessons are directly applicable to this PWA.
+
+**TL;DR from Windex:**
+- Magic links and OTP codes look interchangeable in Supabase's UI but behave very differently in web deployments
+- Magic links create URL fragment parsing bugs, router race conditions, and single-use device-binding failures
+- OTP codes (user types a 6-digit code from email) eliminate the entire category of URL handoff problems
+- **Four prevention items that belong in Phase C from day one:**
+  1. Use 6-digit OTP codes, not magic links
+  2. Capture any incoming auth params at module load, before the router mounts and strips them
+  3. Add a grace period (30s starting value) before 401s trigger signout
+  4. Edge functions called from contexts without a JWT need `--no-verify-jwt`
+
+**Why magic links failed on Windex:**
+- Expo Router (and Next.js App Router to a lesser extent) strips URL fragments before auth code can read them
+- Session handoff became racy — setting session then navigating sometimes lost the session
+- Magic links are single-use and device-bound; clicking on phone when you wanted laptop = recovery failure
+- iOS Mail "preview" consumed links before user clicked them
+
+**Why OTP codes work:**
+- No URL handoff means no router involvement; code is just a string the user types
+- No single-use device binding; user can request code on one device and enter on another
+- Failures are visible and recoverable (wrong code → clear error, expired code → request new one)
+- Stable on Windex for months after the switch
+
+**Subtler bugs that survived the OTP switch:**
+- **Auth code captured too late:** Even with OTP, password recovery and OAuth callbacks emit codes in URLs. Fix: capture URL params at module load (before React/router mounts) in a bootstrap file.
+- **Spurious 401s triggering signout:** Supabase sessions can momentarily return 401 during token refresh or network blips. Fix: add 30s grace period before treating 401 as "session dead."
+- **Edge functions 401-looping:** Functions called from webhooks/cron/public endpoints without a user JWT need `--no-verify-jwt` or they 401-loop silently.
+
+**Cross-cutting principle (applies beyond auth):** Prefer flows that don't depend on URL handoffs in a Next.js + Vercel deployment. Router behavior, browser URL normalization, and fragment handling interact in hard-to-debug ways. Anything you can do in-app (code entry, manual paste, in-app navigation) is more robust than anything that crosses an `https://...?token=...` boundary.
+
+**Windex project checklist (transplanted to this project):**
+1. Set Supabase email template to OTP, not magic link
+2. Build a code-entry form, not a "check your email and click the link" screen
+3. Capture URL params at module load in a bootstrap file (required for password recovery flows)
+4. Wrap 401 handler in a grace period before triggering signout (30s starting value)
+5. Audit edge functions for JWT verification needs
+6. Test on Safari early (Chrome is forgiving about fragment timing; Safari isn't)
+
+These six items are integrated into Phase C below.
+
 ## Required Supabase setup (manual, before code work)
 - Enable Supabase Auth and pick OTP provider (email or SMS)
   - Email is simpler (no Twilio account needed)
   - SMS requires Twilio integration (which is on the deferred Phase 3 list anyway)
-- Configure email templates (defaults are fine for v1)
+- **Configure email template to send 6-digit OTP code, NOT magic link**
+  - Supabase dashboard → Authentication → Email Templates → "Magic Link" template
+  - Replace `{{ .ConfirmationURL }}` content with the OTP code variable
+  - Or use a fully separate "Email OTP" template
 - Configure RLS policies on read-relevant tables:
   - tank_level_log: SELECT allowed for authenticated users
   - watering_events: SELECT allowed for authenticated users
@@ -104,11 +150,22 @@ This means RLS policies need to be configured on the relevant tables (tank_level
 
 ### Phase C: Auth integration (~30 min, autonomous prompt)
 - C.1 Create Supabase client utility (lib/supabase.ts)
-- C.2 Login page with email input → OTP send → verify flow
-- C.3 Auth context / middleware to protect routes
-- C.4 Logout button
-- C.5 Test end-to-end auth flow on Vercel preview
-- C.6 Commit and push
+- C.2 **Create auth bootstrap file** to capture URL params at module load (before router mounts) — required for password recovery flows even though primary auth is OTP
+- C.3 Login page with **6-digit OTP code entry form** (NOT magic link click flow)
+  - Email input → send OTP → user types code → verify
+  - Use `supabase.auth.verifyOtp({ email, token, type: 'email' })`
+- C.4 Auth context / middleware to protect routes
+- C.5 **Implement 401 grace period** (30s starting value) before triggering signout — prevents spurious logouts during token refresh
+- C.6 Logout button
+- C.7 **Test on Safari early** (not just Chrome) — Safari is less forgiving about timing/fragment issues
+- C.8 Test end-to-end auth flow on Vercel preview
+- C.9 Commit and push
+
+**Prevention items from Windex (all four integrated above):**
+1. ✓ Use 6-digit OTP codes, not magic links (C.3)
+2. ✓ Capture URL params at module load before router strips them (C.2)
+3. ✓ Add grace period before 401s trigger signout (C.5)
+4. ✓ Edge functions JWT verification — not applicable to v1 (no edge functions in scope)
 
 ### Phase D: Dashboard data + UI (~1-2 hours, autonomous prompt)
 - D.1 Data fetching hooks for the three sections (health, tank chart, events)
@@ -137,7 +194,7 @@ Total estimated effort: 3-4 hours across 5 autonomous prompts + 2 manual setup s
 
 ## Open questions for human review
 
-1. **Email or SMS for OTP?** Email is simpler (no Twilio needed). SMS is more familiar but requires Twilio setup. Default recommendation: email.
+1. **Email or SMS for OTP?** Email is simpler (no Twilio needed). SMS is more familiar but requires Twilio setup. Default recommendation: email. **Note:** OTP code method is decided (per Windex lessons); this question is just about delivery channel.
 2. **RLS policy granularity:** authenticated users can read everything, or further restrict (e.g., only the buzz user)? For one-user system, "any authenticated user" is fine and simpler. Default: any authenticated user.
 3. **Service worker scope:** cache the app shell (HTML/CSS/JS) for offline UI even when network is down, vs. cache nothing (PWA without offline). Default recommendation: cache app shell so UI loads offline; data fetches will fail gracefully but the user sees something rather than a broken page.
 4. **Chart library:** Chart.js (used in current Lenovo dashboard) or Recharts (more idiomatic React)? Default: Recharts for the new project.
@@ -168,4 +225,4 @@ The new irrigation-monitor-app project follows the same working agreement as irr
 
 ---
 
-*Last updated: 2026-05-21 — Planning phase. No code exists yet. Next: decide OTP method, create repo (Phase A).*
+*Last updated: 2026-05-21 — Planning phase. Auth approach decided (6-digit OTP, not magic links, per Windex lessons). No code exists yet. Next: create repo (Phase A).*
