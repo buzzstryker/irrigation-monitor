@@ -1,6 +1,6 @@
 ﻿# Project Context — irrigation-monitor
 
-*Master template lives at: `C:\Users\buzzs\OneDrive\Desktop\Projects\Project_Context_TEMPLATE.md`*
+*Master template lives in the buzz-project-docs GitHub repo at https://github.com/buzzstryker/buzz-project-docs*
 
 ---
 
@@ -66,7 +66,11 @@ Not yet deployed. Future entries when applicable:
 
 ## Working agreement with Claude
 
-**All Claude Code prompts drafted in this project must enforce the following sections of `Buzz_Project_Development_Procedure.md` (kept at `C:\Users\buzzs\OneDrive\Desktop\Projects\Buzz_Project_Development_Procedure.md`):**
+**All Claude Code prompts drafted in this project must enforce the following sections of `Buzz_Project_Development_Procedure.md`:**
+
+The standing procedure doc (Buzz_Project_Development_Procedure.md) lives in the buzz-project-docs GitHub repo, cloned alongside this Projects folder. On the Lenovo machine that's `C:\Users\buzzs\Desktop\buzz-project-docs\Buzz_Project_Development_Procedure.md`. On other machines the parent path varies — clone the repo from https://github.com/buzzstryker/buzz-project-docs if not present. Pull latest before any major session that might rely on its conventions.
+
+**Required sections:**
 
 - **3.2a — Working-tree hygiene.** Every Claude Code session ends with a clean `git status`. No "I'll commit this later." Backend deploys (Supabase migrations, Edge Functions) and the corresponding git commits are paired operations.
 - **3.2b — Backend deploys are git operations.** Any `npx supabase db query`, `npx supabase functions deploy`, or `npx vercel env add` must be followed by a git commit of the source in the same session.
