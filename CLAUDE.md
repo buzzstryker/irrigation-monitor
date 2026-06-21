@@ -28,8 +28,11 @@ Lenovo (always on)
 +-- coefficient-model.js       — Zone Kz model, daily target vs actual
 +-- sync.js                    — SQLite ? Supabase sync
 +-- zones.config.js            — Full zone inventory + tank constants
-+-- db.js                      — better-sqlite3, 15 tables, getDb() sync pattern
++-- db.js                      — Supabase client (getDb() returns @supabase/supabase-js, NOT better-sqlite3 anymore)
 +-- tank-drawdown-calibration.js — Tank-drawdown GPM calibration CLI
++-- tank-strapping.js          — Norwesco 44407 depth↔gallons strapping table (used by Tuya sensor pipeline)
++-- tuya.js                    — Tuya Cloud OpenAPI client (HMAC signer, token cache, status fetch — zero deps)
++-- scripts/tuya-discover.js   — One-shot DP/cadence checkpoint script (run before wiring poll loop)
 +-- migrations/                — SQL migration files
 +-- sms/
 ¦   +-- handler.js             — Twilio inbound webhook
@@ -111,9 +114,9 @@ Lenovo (always on)
 | Table | Phase | Purpose |
 |-------|-------|---------|
 | zone_state_log | 0 | Zone on/off transitions every poll |
-| tank_level_log | 0 | Tank level every 60s |
+| tank_level_log | 0 | **LEGACY MODEL** — tank level estimate every 60s. Kept running in parallel with tank_sensor_log for measured-vs-modeled comparison pending cutover. Do not retire until the strapping table is validated against real drawdown data. |
 | watering_events | 0 | Completed zone runs; gallons calculated from configured GPM × duration |
-| warnings | 0 | Low tank, ditch failure alerts |
+| warnings | 0 | Low tank, ditch failure alerts; clamp events from tank_sensor_log (type='tank_sensor_clamped') |
 | et_log | 1 | Daily ET from Open-Meteo |
 | zone_coefficients | 2 | Per-zone Kz learning coefficients |
 | zone_daily_analysis | 2 | Daily target vs actual per zone |
@@ -121,15 +124,18 @@ Lenovo (always on)
 | observations | 5 | User feedback ratings per zone |
 | scheduled_reminders | 5 | Check-in SMS schedule |
 | ditch_health_log | 6 | Daily flow meter diagnostic |
-| tank_sensor_log | 7 | ESP32 ultrasonic sensor readings |
+| tank_sensor_log | 7 | **MEASURED (authoritative)** — Tuya ME201W liquid-level depth → strapping table → gallons. Columns: timestamp (bigint epoch sec), depth_meters (raw sensor), depth_inches, level_gallons, source ('sensor'), clamped ('low'/'high'/NULL). |
 | user_preferences | — | Per-user language, phone, role |
 | flow_calibration_log | 4 | Tank-drawdown GPM calibration measurements |
 | et_forecast_log | 1 | Multi-day ET forecast snapshots |
 
 **Note:** `watering_events.flow_source` and `flow_quality` columns always contain 'calculated' (backfilled 2026-05-12)
 
-**Pattern:** Always use `getDb()` from db.js — synchronous better-sqlite3.
-**Never use:** async initDb() or sql.js — was a failed workaround, now replaced.
+**Tank measurement doctrine (2026-06):** `tank_sensor_log` is the authoritative measured source going forward (Tuya ME201W → `tank-strapping.js` → gallons). `tank_level_log` keeps writing the legacy modeled level **in parallel** so we can validate the strapping curve against real drawdown data. The cutover (retire the model, dashboard reads measured only) happens after enough side-by-side data accumulates — not before.
+
+**Pattern:** `getDb()` from db.js returns the @supabase/supabase-js client (async). The function name is a holdover from the better-sqlite3 era; the implementation is Supabase-only since Phase 4. **Never use better-sqlite3 for new code.** sync.js still references SQLite but is dead in production — pending removal.
+
+**Schema drift watch:** `supabase/schema.sql` is the file-of-record for new deploys but the live DB has drifted. Notable: `tank_sensor_log.timestamp` is `BIGINT` epoch seconds in live (matching watering_events / tank_level_log / warnings), NOT `TIMESTAMPTZ` as older copies of schema.sql claimed. Always query information_schema before trusting schema.sql.
 
 ---
 
@@ -226,6 +232,8 @@ Same timing, sod zones × 0.67 duration, drips unchanged.
 6. **Conflict detection:** Daily check that Hydrawise programs are still suspended — alert if re-enabled
 7. **sql.js was a failed workaround** for Node 24 — Node was downgraded to 22, better-sqlite3 reinstalled
 8. **Per-zone GPM is static configuration** — Real-time flow measurement is not available via the Hydrawise REST API v1 (investigated and documented 2026-05-12; see docs/hydrawise-api-flow-fields.md). Per-zone GPM values are manually maintained in zones.config.js. These should be re-measured and updated whenever emitter configuration changes (added/removed/repaired outlets downstream of a valve). Tank-drawdown calibration via tank-drawdown-calibration.js is the recommended measurement method: run a zone for known duration, measure tank level before/after, subtract concurrent ditch fill, compute GPM.
+9. **Tank level: measured beats modeled** — Tuya ME201W reports liquid-level depth in meters; `tank-strapping.js` converts depth → gallons via the Norwesco 44407 elliptical strapping table (anchored to 1725 gal at 41"). `tuya.js` is a zero-dependency client (hand-rolled HMAC, built-in `crypto` + `fetch`). The strapping table is the canonical curve — never reimplement; refine in place by replacing modeled rows with empirical (depth, gallons) pairs collected during real drawdowns. The modeled `tank_level_log` keeps running in parallel until enough sensor data validates the curve.
+10. **Tuya polling cadence: never faster than the device pushes** — ME201W is a battery-friendly Wi-Fi sensor that reports to Tuya cloud on its own schedule. Polling cloud faster than the device's push interval just re-reads the same `update_time`. Floor: 5 min. Confirmed cadence via `scripts/tuya-discover.js --watch` against the device's `update_time` field; the poll loop matches that observed interval. Hardcoded unit conversions (mm vs cm vs m) are forbidden until the DP code and unit are confirmed against a raw `/v1.0/devices/{id}/status` dump — a 1000× error sails right through the strapping table and writes plausible garbage.
 
 ---
 
@@ -238,13 +246,31 @@ LONGITUDE=-121.1964
 ELEVATION_M=122
 SUPABASE_URL=              # From Supabase dashboard
 SUPABASE_ANON_KEY=         # From Supabase dashboard
+SUPABASE_SERVICE_KEY=      # From Supabase dashboard (bypasses RLS — server-side only)
 TWILIO_ACCOUNT_SID=        # From Twilio console (starts with AC...)
 TWILIO_AUTH_TOKEN=         # From Twilio console
 TWILIO_PHONE_NUMBER=       # +1XXXXXXXXXX format
 OWNER_PHONE=               # Owner's phone +1XXXXXXXXXX
+TUYA_ACCESS_ID=            # iot.tuya.com → Cloud project → client_id
+TUYA_ACCESS_SECRET=        # iot.tuya.com → Cloud project → client_secret
+TUYA_DEVICE_ID=            # ME201W device ID from IoT console device list
+TUYA_REGION=us             # 'us' | 'eu' | 'cn' | 'in' (selects API base URL)
 PORT=3001
-DB_PATH=./irrigation.db
+DB_PATH=./irrigation.db    # legacy SQLite path; preserved on disk but no longer read in prod
 ```
+
+> **⚠️ RAILWAY DEPLOY WARNING — read before pushing.**
+> Railway's auto-detection has historically missed env vars added after the
+> initial deploy (it missed `SUPABASE_SERVICE_KEY`, which caused silent prod
+> failures while local was happy). The new `TUYA_*` vars are the exact same
+> risk: the discover script works locally, then poll.js runs on Railway with
+> `process.env.TUYA_ACCESS_ID === undefined`, tuya.js throws, the error gets
+> swallowed by the catch in the poll loop, and `tank_sensor_log` silently
+> stops getting rows. **After adding TUYA_ACCESS_ID, TUYA_ACCESS_SECRET,
+> TUYA_DEVICE_ID, and TUYA_REGION to local `.env`, immediately mirror them
+> into Railway's environment variables (Project → Variables) and re-deploy.**
+> Verify by tailing Railway logs for a "tank_sensor_log: inserted" line within
+> 5 minutes of deploy.
 
 ---
 
@@ -260,6 +286,8 @@ DB_PATH=./irrigation.db
 - [ ] Import zone photos from Hydrawise screenshots into zone-images/ folder
 - [ ] Implement optimized schedule in Hydrawise app (manual until Phase 4)
 - [ ] Periodic GPM re-measurement via tank-drawdown-calibration.js when emitter configuration changes
+- [ ] **Tuya integration checkpoint** — add `TUYA_ACCESS_ID` / `TUYA_ACCESS_SECRET` / `TUYA_DEVICE_ID` / `TUYA_REGION` to `.env`; run `node scripts/tuya-discover.js` and `--watch`; confirm DP code + unit + push cadence; apply `migrations/migration_tank_sensor_depth_clamped.sql` via Supabase SQL editor; then wire poll.js.
+- [ ] **Tuya env vars on Railway** — mirror all four `TUYA_*` vars into Railway environment variables BEFORE deploying the poll.js wiring commit (history of Railway missing env-var-only changes; verify with log tail after deploy).
 
 ---
 
@@ -275,6 +303,7 @@ DB_PATH=./irrigation.db
 | Twilio | SMS/MMS | ~$1/mo + usage |
 | Railway | Cloud server for polling | ~$7/mo |
 | Anthropic API | SMS translation | Pay per use |
+| Tuya Cloud (IoT) | ME201W liquid-level depth pull | Free (Cloud Development trial; renew yearly) |
 
 ---
 
@@ -294,4 +323,4 @@ Phase 4a's infrastructure was deprecated in May 2026 across six refactor waves. 
 
 ---
 
-*Last updated 2026-05-19 — Phase 4a deprecated in favor of static-GPM architecture. Phases 0, 1, 2 complete. Phase 3 paused. Phase 4 pending.*
+*Last updated 2026-06-20 — Tuya ME201W liquid-level sensor pipeline added (tank-strapping.js, tuya.js, scripts/tuya-discover.js, tank_sensor_log migration). poll.js wiring deferred until raw DP / unit / push-cadence confirmed via discover script. tank_level_log (modeled) kept running in parallel for measured-vs-modeled comparison. Phase 4a deprecated; Phases 0, 1, 2 complete. Phase 3 paused. Phase 4 pending.*
