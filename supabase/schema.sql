@@ -109,16 +109,22 @@ CREATE TABLE IF NOT EXISTS tank_level_log (
 );
 
 -- ──────────────────────────────────────────────
--- Tank Sensor Log (Phase 7 — ESP32)
+-- Tank Sensor Log (Tuya ME201W liquid-level sensor)
+-- Originally specced for an ESP32 in Phase 7; switched to a Tuya Wi-Fi sensor
+-- 2026-06. Timestamp is BIGINT epoch seconds to match watering_events /
+-- tank_level_log / warnings (NOT TIMESTAMPTZ — the schema.sql here was wrong
+-- until 2026-06-20; live db had drifted to BIGINT epoch). No created_at column;
+-- timestamp IS the insertion moment.
 -- ──────────────────────────────────────────────
 
 CREATE TABLE IF NOT EXISTS tank_sensor_log (
   id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-  timestamp TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  timestamp BIGINT NOT NULL,
+  depth_meters REAL,
   depth_inches REAL,
   level_gallons REAL,
   source TEXT CHECK(source IN ('sensor','calculated')) DEFAULT 'calculated',
-  created_at TIMESTAMPTZ DEFAULT NOW()
+  clamped TEXT CHECK(clamped IN ('low','high'))
 );
 
 -- ──────────────────────────────────────────────
