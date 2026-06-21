@@ -20,7 +20,7 @@ A Node.js service running on a Lenovo Legion (Windows/WSL) that replaces static 
 
 ```
 Lenovo (always on)
-+-- poll.js                    — Hydrawise polling every 60s, all 3 controllers
++-- poll.js                    — Hydrawise polling every 60s, all 3 controllers; Tuya ME201W tank sensor every 5 min on its own timer
 +-- server.js                  — Express port 3001, 8 endpoints
 +-- et-engine.js               — Open-Meteo fetch + Penman-Monteith ETo
 +-- et-logger.js               — Daily 2AM cron, logs actual + forecast ET
@@ -286,8 +286,9 @@ DB_PATH=./irrigation.db    # legacy SQLite path; preserved on disk but no longer
 - [ ] Import zone photos from Hydrawise screenshots into zone-images/ folder
 - [ ] Implement optimized schedule in Hydrawise app (manual until Phase 4)
 - [ ] Periodic GPM re-measurement via tank-drawdown-calibration.js when emitter configuration changes
-- [ ] **Tuya integration checkpoint** — add `TUYA_ACCESS_ID` / `TUYA_ACCESS_SECRET` / `TUYA_DEVICE_ID` / `TUYA_REGION` to `.env`; run `node scripts/tuya-discover.js` and `--watch`; confirm DP code + unit + push cadence; apply `migrations/migration_tank_sensor_depth_clamped.sql` via Supabase SQL editor; then wire poll.js.
-- [ ] **Tuya env vars on Railway** — mirror all four `TUYA_*` vars into Railway environment variables BEFORE deploying the poll.js wiring commit (history of Railway missing env-var-only changes; verify with log tail after deploy).
+- [x] ~~**Tuya integration checkpoint**~~ — TUYA_* added to local `.env`; discover dump confirmed DP `liquid_depth` carries depth in integer cm; cadence locked at 5 min (device push interval > 1 min). poll.js wired (2026-06-20).
+- [ ] **Apply migration to Supabase** — paste `migrations/migration_tank_sensor_depth_clamped.sql` into the Supabase SQL editor before the next Railway deploy. Until applied, `tank_sensor_log` inserts fail with "Could not find the 'clamped' column" — poll.js logs the error but the loop survives; modeled `tank_level_log` is unaffected.
+- [ ] **Tuya env vars on Railway** — mirror all four `TUYA_*` vars into Railway Project → Variables BEFORE the next deploy. The startup banner says `Tuya creds: loaded` when configured; verify by tailing Railway logs for `[TANK-SENSOR] Cycle #1 |` within 5 min of deploy.
 
 ---
 
@@ -323,4 +324,4 @@ Phase 4a's infrastructure was deprecated in May 2026 across six refactor waves. 
 
 ---
 
-*Last updated 2026-06-20 — Tuya ME201W liquid-level sensor pipeline added (tank-strapping.js, tuya.js, scripts/tuya-discover.js, tank_sensor_log migration). poll.js wiring deferred until raw DP / unit / push-cadence confirmed via discover script. tank_level_log (modeled) kept running in parallel for measured-vs-modeled comparison. Phase 4a deprecated; Phases 0, 1, 2 complete. Phase 3 paused. Phase 4 pending.*
+*Last updated 2026-06-20 — Tuya ME201W liquid-level sensor pipeline wired end-to-end in poll.js (independent 5-min timer). Discovery confirmed DP `liquid_depth` is integer cm. Migration `migration_tank_sensor_depth_clamped.sql` pending application in Supabase SQL editor; until applied, inserts fail loudly but the loop survives and modeled tank_level_log keeps running. Phase 4a deprecated; Phases 0, 1, 2 complete. Phase 3 paused. Phase 4 pending.*

@@ -12,9 +12,19 @@ require('dotenv').config();
 
 const { supabase } = require('./db');
 const { controllers, tank } = require('./zones.config');
+const tuya = require('./tuya');
+const { depthMetersToGallons } = require('./tank-strapping');
 
 const API_KEY = process.env.HYDRAWISE_API_KEY;
 const POLL_INTERVAL_MS = 60_000;
+
+// Tuya ME201W liquid-level sensor: poll every 5 minutes on its own timer.
+// The device pushes to Tuya cloud less than once a minute (confirmed via
+// scripts/tuya-discover.js — update_time was 6 min stale at first dump), so
+// polling faster than 5 min just re-reads identical samples. Decoupled from
+// the Hydrawise tick — tank level is slow-moving and sensor refreshes are
+// independent of zone events.
+const TANK_SENSOR_INTERVAL_MS = 5 * 60_000;
 
 // In-memory state for detecting zone on/off transitions
 const zoneState = {};  // key: "controller:zone_id" → { on: bool, startedAt: number }
@@ -284,6 +294,83 @@ async function updateTankLevel(zones) {
 }
 
 // ──────────────────────────────────────────────
+// Tuya ME201W tank-sensor poll (independent 5-min timer)
+// ──────────────────────────────────────────────
+
+let sensorPollCount = 0;
+
+/**
+ * One Tuya read → tank_sensor_log insert. Idempotent w.r.t. failures: the
+ * Tuya fetch and the Supabase insert are guarded separately so a Tuya
+ * outage doesn't masquerade as a Supabase outage in the logs. Loud errors,
+ * but never throws — the setInterval must survive transient failures.
+ *
+ * The strapping table's `clamped` value (when non-null) is mirrored into
+ * `warnings` so dashboards/SMS surface the out-of-range condition without
+ * having to scan tank_sensor_log themselves.
+ */
+async function pollTankSensor() {
+  sensorPollCount++;
+
+  // Step 1: Tuya read.
+  let dps;
+  try {
+    dps = await tuya.getDeviceStatus();
+  } catch (err) {
+    console.error(`[TANK-SENSOR] Tuya fetch failed: ${err.message}`);
+    return;
+  }
+
+  const depthDp = dps.find(d => d.code === 'liquid_depth');
+  if (!depthDp) {
+    console.error('[TANK-SENSOR] liquid_depth DP not present in Tuya response — device profile changed?');
+    return;
+  }
+
+  // DP unit is integer centimetres (confirmed against installation_height/
+  // liquid_depth_max calibration constants during 2026-06-20 discovery).
+  const depthM = depthDp.value / 100;
+  const { gallons, depthIn, clamped } = depthMetersToGallons(depthM);
+  const timestamp = Math.floor(Date.now() / 1000);
+
+  // Step 2: Supabase insert.
+  const { error: insertErr } = await supabase
+    .from('tank_sensor_log')
+    .insert({
+      timestamp,
+      depth_meters: depthM,
+      depth_inches: Math.round(depthIn * 100) / 100,
+      level_gallons: Math.round(gallons * 10) / 10,
+      source: 'sensor',
+      clamped,
+    });
+
+  if (insertErr) {
+    console.error(`[TANK-SENSOR] tank_sensor_log insert failed: ${insertErr.message}`);
+    return;
+  }
+
+  // Step 3: clamp fan-out to warnings.
+  if (clamped) {
+    const { error: warnErr } = await supabase
+      .from('warnings')
+      .insert({
+        type: 'tank_sensor_clamped',
+        message: `Tank sensor reading clamped ${clamped} (raw depth ${depthM.toFixed(3)} m / ${depthIn.toFixed(2)} in)`,
+        resolved: 0,
+      });
+    if (warnErr) {
+      console.error(`[TANK-SENSOR] warnings insert failed: ${warnErr.message}`);
+    }
+  }
+
+  if (sensorPollCount === 1 || sensorPollCount % 12 === 0) {
+    // ~hourly heartbeat (12 × 5min = 60min). First cycle always logged.
+    console.log(`[TANK-SENSOR] Cycle #${sensorPollCount} | ${depthM.toFixed(3)} m → ${Math.round(gallons)} gal${clamped ? ` (CLAMPED ${clamped})` : ''}`);
+  }
+}
+
+// ──────────────────────────────────────────────
 // Main poll loop
 // ──────────────────────────────────────────────
 
@@ -350,3 +437,16 @@ if (!API_KEY) {
 // First poll immediately, then every 60s
 poll();
 setInterval(poll, POLL_INTERVAL_MS);
+
+// Tuya tank-sensor poll: independent 5-min timer. Skipped (with a loud one-time
+// warning) if Tuya creds aren't configured — same silent-failure trap that bit
+// SUPABASE_SERVICE_KEY on Railway is exactly what this guard protects against.
+const tuyaConfigured = !!(process.env.TUYA_ACCESS_ID && process.env.TUYA_ACCESS_SECRET && process.env.TUYA_DEVICE_ID);
+console.log(`[TANK-SENSOR] Tuya creds: ${tuyaConfigured ? 'loaded' : 'NOT SET'} | region: ${process.env.TUYA_REGION || 'us (default)'} | interval: ${TANK_SENSOR_INTERVAL_MS / 60_000}min`);
+
+if (tuyaConfigured) {
+  pollTankSensor();
+  setInterval(pollTankSensor, TANK_SENSOR_INTERVAL_MS);
+} else {
+  console.warn('[TANK-SENSOR] TUYA_ACCESS_ID/SECRET/DEVICE_ID not set — measured-tank logging disabled. Modeled tank_level_log still active.');
+}
