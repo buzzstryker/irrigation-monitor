@@ -124,7 +124,8 @@ CREATE TABLE IF NOT EXISTS tank_sensor_log (
   depth_inches REAL,
   level_gallons REAL,
   source TEXT CHECK(source IN ('sensor','calculated')) DEFAULT 'calculated',
-  clamped TEXT CHECK(clamped IN ('low','high'))
+  clamped TEXT CHECK(clamped IN ('low','high')),
+  device_update_time BIGINT  -- Tuya device.update_time (epoch sec), diagnostic only
 );
 
 -- ──────────────────────────────────────────────

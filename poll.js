@@ -18,13 +18,21 @@ const { depthMetersToGallons } = require('./tank-strapping');
 const API_KEY = process.env.HYDRAWISE_API_KEY;
 const POLL_INTERVAL_MS = 60_000;
 
-// Tuya ME201W liquid-level sensor: poll every 5 minutes on its own timer.
-// The device pushes to Tuya cloud less than once a minute (confirmed via
-// scripts/tuya-discover.js — update_time was 6 min stale at first dump), so
-// polling faster than 5 min just re-reads identical samples. Decoupled from
-// the Hydrawise tick — tank level is slow-moving and sensor refreshes are
-// independent of zone events.
-const TANK_SENSOR_INTERVAL_MS = 5 * 60_000;
+// Tuya ME201W liquid-level sensor poll interval: 2 minutes (120s).
+// Rationale: device pushes fresh liquid_depth to Tuya cloud every ~2.5 min
+// (144-165s observed via scripts/tuya-discover.js Phase A/B, 2026-06-21).
+// Polling at 2 min stays just ahead of the device's push cadence while
+// minimizing duplicate reads. update_time is FROZEN/unreliable (didn't advance
+// during 10-min fast drawdown), so dedup logic is based on liquid_depth VALUE,
+// not timestamp. Override via TANK_POLL_INTERVAL_MS env var for calibration
+// sessions (e.g., 20000 for 20s during valve runs).
+const TANK_SENSOR_INTERVAL_MS = parseInt(process.env.TANK_POLL_INTERVAL_MS, 10) || 120_000;
+
+// Heartbeat interval: insert a tank_sensor_log row even if depth is unchanged
+// when this much time has elapsed since the last insert. Critical for detecting
+// logger/sensor failures during long owner absences (~2 months). A silent gap
+// must be distinguishable from a stable tank.
+const TANK_SENSOR_HEARTBEAT_MS = 20 * 60_000;  // 20 minutes
 
 // In-memory state for detecting zone on/off transitions
 const zoneState = {};  // key: "controller:zone_id" → { on: bool, startedAt: number }
@@ -294,16 +302,28 @@ async function updateTankLevel(zones) {
 }
 
 // ──────────────────────────────────────────────
-// Tuya ME201W tank-sensor poll (independent 5-min timer)
+// Tuya ME201W tank-sensor poll (independent 2-min timer)
 // ──────────────────────────────────────────────
 
 let sensorPollCount = 0;
 
+// Dedup state: track last-logged depth and timestamp to skip duplicate rows.
+// Key insight from Phase A/B measurement (2026-06-21): device's update_time is
+// FROZEN (didn't advance during 10-min fast drawdown even as liquid_depth
+// changed), so we dedup on liquid_depth VALUE, not timestamp. Also enforce a
+// 20-min heartbeat: insert even if depth unchanged to prove logger is alive.
+let lastLoggedDepthCm = null;
+let lastLoggedTimestamp = null;
+
 /**
- * One Tuya read → tank_sensor_log insert. Idempotent w.r.t. failures: the
- * Tuya fetch and the Supabase insert are guarded separately so a Tuya
- * outage doesn't masquerade as a Supabase outage in the logs. Loud errors,
- * but never throws — the setInterval must survive transient failures.
+ * One Tuya read → tank_sensor_log insert (if depth changed OR heartbeat).
+ * Dedup logic: only insert when liquid_depth differs from last logged value,
+ * OR when >= 20 min since last insert (heartbeat to prove logger is alive).
+ *
+ * Idempotent w.r.t. failures: the Tuya fetch and the Supabase insert are
+ * guarded separately so a Tuya outage doesn't masquerade as a Supabase outage
+ * in the logs. Loud errors, but never throws — the setInterval must survive
+ * transient failures.
  *
  * The strapping table's `clamped` value (when non-null) is mirrored into
  * `warnings` so dashboards/SMS surface the out-of-range condition without
@@ -312,10 +332,13 @@ let sensorPollCount = 0;
 async function pollTankSensor() {
   sensorPollCount++;
 
-  // Step 1: Tuya read.
-  let dps;
+  // Step 1: Tuya read (device status + device info for update_time).
+  let dps, deviceInfo;
   try {
-    dps = await tuya.getDeviceStatus();
+    [dps, deviceInfo] = await Promise.all([
+      tuya.getDeviceStatus(),
+      tuya.getDeviceInfo()
+    ]);
   } catch (err) {
     console.error(`[TANK-SENSOR] Tuya fetch failed: ${err.message}`);
     return;
@@ -329,11 +352,23 @@ async function pollTankSensor() {
 
   // DP unit is integer centimetres (confirmed against installation_height/
   // liquid_depth_max calibration constants during 2026-06-20 discovery).
-  const depthM = depthDp.value / 100;
+  const depthCm = depthDp.value;
+  const depthM = depthCm / 100;
   const { gallons, depthIn, clamped } = depthMetersToGallons(depthM);
   const timestamp = Math.floor(Date.now() / 1000);
+  const deviceUpdateTime = deviceInfo.update_time;
 
-  // Step 2: Supabase insert.
+  // Step 2: Dedup check — skip insert if depth unchanged AND heartbeat not due.
+  const depthChanged = lastLoggedDepthCm === null || depthCm !== lastLoggedDepthCm;
+  const heartbeatDue = lastLoggedTimestamp === null ||
+    (timestamp - lastLoggedTimestamp) >= (TANK_SENSOR_HEARTBEAT_MS / 1000);
+
+  if (!depthChanged && !heartbeatDue) {
+    // Depth unchanged and heartbeat not due — skip insert, preserve dedup state.
+    return;
+  }
+
+  // Step 3: Supabase insert.
   const { error: insertErr } = await supabase
     .from('tank_sensor_log')
     .insert({
@@ -343,6 +378,7 @@ async function pollTankSensor() {
       level_gallons: Math.round(gallons * 10) / 10,
       source: 'sensor',
       clamped,
+      device_update_time: deviceUpdateTime,
     });
 
   if (insertErr) {
@@ -350,7 +386,11 @@ async function pollTankSensor() {
     return;
   }
 
-  // Step 3: clamp fan-out to warnings.
+  // Update dedup state ONLY after successful insert.
+  lastLoggedDepthCm = depthCm;
+  lastLoggedTimestamp = timestamp;
+
+  // Step 4: clamp fan-out to warnings.
   if (clamped) {
     const { error: warnErr } = await supabase
       .from('warnings')
@@ -364,9 +404,10 @@ async function pollTankSensor() {
     }
   }
 
-  if (sensorPollCount === 1 || sensorPollCount % 12 === 0) {
-    // ~hourly heartbeat (12 × 5min = 60min). First cycle always logged.
-    console.log(`[TANK-SENSOR] Cycle #${sensorPollCount} | ${depthM.toFixed(3)} m → ${Math.round(gallons)} gal${clamped ? ` (CLAMPED ${clamped})` : ''}`);
+  // Log on first cycle, hourly (~30 cycles × 2min = 60min), or when depth changed.
+  const reason = depthChanged ? 'CHANGED' : 'heartbeat';
+  if (sensorPollCount === 1 || sensorPollCount % 30 === 0 || depthChanged) {
+    console.log(`[TANK-SENSOR] Cycle #${sensorPollCount} (${reason}) | ${depthCm}cm → ${Math.round(gallons)} gal${clamped ? ` (CLAMPED ${clamped})` : ''}`);
   }
 }
 
@@ -438,11 +479,15 @@ if (!API_KEY) {
 poll();
 setInterval(poll, POLL_INTERVAL_MS);
 
-// Tuya tank-sensor poll: independent 5-min timer. Skipped (with a loud one-time
-// warning) if Tuya creds aren't configured — same silent-failure trap that bit
-// SUPABASE_SERVICE_KEY on Railway is exactly what this guard protects against.
+// Tuya tank-sensor poll: independent 2-min timer (env-overridable for calibration).
+// Skipped (with a loud one-time warning) if Tuya creds aren't configured — same
+// silent-failure trap that bit SUPABASE_SERVICE_KEY on Railway is exactly what
+// this guard protects against.
 const tuyaConfigured = !!(process.env.TUYA_ACCESS_ID && process.env.TUYA_ACCESS_SECRET && process.env.TUYA_DEVICE_ID);
-console.log(`[TANK-SENSOR] Tuya creds: ${tuyaConfigured ? 'loaded' : 'NOT SET'} | region: ${process.env.TUYA_REGION || 'us (default)'} | interval: ${TANK_SENSOR_INTERVAL_MS / 60_000}min`);
+const intervalDisplay = TANK_SENSOR_INTERVAL_MS >= 60_000
+  ? `${TANK_SENSOR_INTERVAL_MS / 60_000}min`
+  : `${TANK_SENSOR_INTERVAL_MS / 1000}s`;
+console.log(`[TANK-SENSOR] Tuya creds: ${tuyaConfigured ? 'loaded' : 'NOT SET'} | region: ${process.env.TUYA_REGION || 'us (default)'} | interval: ${intervalDisplay} | heartbeat: ${TANK_SENSOR_HEARTBEAT_MS / 60_000}min`);
 
 if (tuyaConfigured) {
   pollTankSensor();
