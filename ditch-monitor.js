@@ -348,90 +348,77 @@ async function fireAlert(alert) {
 // Neighbor-Draw Detection (Stage 1: Passive Logging)
 // ──────────────────────────────────────────────
 
-const NEIGHBOR_SUB_WINDOW_MINUTES = 10;  // Rolling window for instantaneous rate
+const NEIGHBOR_SUB_WINDOW_MINUTES = 5;   // Rolling window for instantaneous rate (shorter to catch brief dips)
 const NEIGHBOR_DIP_THRESHOLD = 0.70;     // Dip if < 70% of baseline (~5.1 GPM from ~7.3)
-const NEIGHBOR_MIN_DIP_MINUTES = 8;      // Sustained for at least 8 minutes
+const NEIGHBOR_MIN_DIP_MINUTES = 4;      // Sustained for at least 4 minutes (matches sensor cadence)
 const NEIGHBOR_RECOVERY_THRESHOLD = 0.90; // Recovery if returns to >= 90% baseline
 
 /**
- * Detect neighbor-draw events within a qualifying fill window.
- * Scans for sub-segments where fill rate dips below threshold then recovers.
+ * Detect neighbor-draw events via pairwise instantaneous rates.
+ * Computes rate between each consecutive sensor reading pair, flags dips,
+ * groups consecutive dips into events. Catches brief dips that get diluted
+ * in rolling-window approaches.
  *
- * @param {number} windowStart - Epoch seconds
- * @param {number} windowEnd - Epoch seconds
- * @param {Array} tankReadings - All tank_sensor_log rows
+ * @param {number} scanEnd - End of scan period (epoch seconds, typically now)
+ * @param {number} scanStart - Start of scan period (epoch seconds)
+ * @param {Array} tankReadings - All tank_sensor_log rows in scan period
  * @param {number} baseline - Established baseline fill rate (GPM)
  * @returns {Array} Array of neighbor draw events
  */
-async function detectNeighborDraws(windowStart, windowEnd, tankReadings, baseline) {
-  const windowReadings = tankReadings.filter(r =>
-    r.timestamp >= windowStart && r.timestamp <= windowEnd
-  );
+async function detectNeighborDrawsContinuous(scanEnd, scanStart, tankReadings, baseline) {
+  if (tankReadings.length < 3) return []; // Need at least 3 points (2 pairs)
 
-  if (windowReadings.length < 10) return []; // Need enough points
-
-  const subWindowSeconds = NEIGHBOR_SUB_WINDOW_MINUTES * 60;
   const events = [];
+  const dipThreshold = baseline * NEIGHBOR_DIP_THRESHOLD;
 
-  // Compute rolling fill rates across the window
-  const rollingRates = [];
-  for (let i = 0; i < windowReadings.length; i++) {
-    const subStart = windowReadings[i].timestamp;
-    const subEnd = subStart + subWindowSeconds;
+  // Compute pairwise instantaneous rates
+  const pairwiseRates = [];
+  for (let i = 0; i < tankReadings.length - 1; i++) {
+    const r1 = tankReadings[i];
+    const r2 = tankReadings[i + 1];
+    const deltaSeconds = r2.timestamp - r1.timestamp;
+    const deltaGallons = r2.level_gallons - r1.level_gallons;
+    const rate_gpm = (deltaGallons / deltaSeconds) * 60;
 
-    const subPoints = windowReadings.filter(r =>
-      r.timestamp >= subStart && r.timestamp <= subEnd
-    );
-
-    if (subPoints.length < 3) continue;
-
-    const points = subPoints.map(r => ({ x: r.timestamp, y: r.level_gallons }));
-    const regr = linearRegression(points);
-
-    if (regr && regr.r2 >= 0.85) {  // Looser fit for sub-windows
-      rollingRates.push({
-        timestamp: subStart,
-        fill_gpm: regr.fill_gpm,
-        r2: regr.r2,
-        sample_count: subPoints.length,
-      });
-    }
+    pairwiseRates.push({
+      timestamp: r1.timestamp,
+      duration_seconds: deltaSeconds,
+      rate_gpm,
+      isDipping: rate_gpm < dipThreshold,
+      level_start: r1.level_gallons,
+      level_end: r2.level_gallons,
+    });
   }
 
-  if (rollingRates.length < 5) return []; // Not enough sub-windows
-
-  // Scan for dip patterns: rate drops below threshold, sustains, then recovers
+  // Group consecutive dipping pairs into events
   let inDip = false;
   let dipStart = null;
-  let dipStartIdx = null;
   let dipRates = [];
 
-  for (let i = 0; i < rollingRates.length; i++) {
-    const rate = rollingRates[i];
-    const isDipping = rate.fill_gpm < (baseline * NEIGHBOR_DIP_THRESHOLD);
+  for (let i = 0; i < pairwiseRates.length; i++) {
+    const pair = pairwiseRates[i];
 
-    if (!inDip && isDipping) {
+    if (!inDip && pair.isDipping) {
       // Start of potential dip
       inDip = true;
-      dipStart = rate.timestamp;
-      dipStartIdx = i;
-      dipRates = [rate];
-    } else if (inDip && isDipping) {
+      dipStart = pair.timestamp;
+      dipRates = [pair];
+    } else if (inDip && pair.isDipping) {
       // Continuing dip
-      dipRates.push(rate);
-    } else if (inDip && !isDipping) {
-      // End of dip - check if it recovered
-      const dipEnd = rollingRates[i - 1].timestamp + subWindowSeconds;
+      dipRates.push(pair);
+    } else if (inDip && !pair.isDipping) {
+      // End of dip - check if it qualifies
+      const lastPair = dipRates[dipRates.length - 1];
+      const dipEnd = lastPair.timestamp + lastPair.duration_seconds;
       const dipDurationMin = (dipEnd - dipStart) / 60;
 
-      if (dipDurationMin >= NEIGHBOR_MIN_DIP_MINUTES && dipRates.length >= 2) {
-        // Check if rate recovered to near-baseline
-        const postDipRates = rollingRates.slice(i, Math.min(i + 3, rollingRates.length));
-        const recovered = postDipRates.some(r => r.fill_gpm >= (baseline * NEIGHBOR_RECOVERY_THRESHOLD));
+      if (dipDurationMin >= NEIGHBOR_MIN_DIP_MINUTES) {
+        // Check if rate recovered to near-baseline after dip
+        const postDipPairs = pairwiseRates.slice(i, Math.min(i + 2, pairwiseRates.length));
+        const recovered = postDipPairs.some(p => p.rate_gpm >= (baseline * NEIGHBOR_RECOVERY_THRESHOLD));
 
-        const avgDipGpm = dipRates.reduce((sum, r) => sum + r.fill_gpm, 0) / dipRates.length;
-        const avgFitQuality = dipRates.reduce((sum, r) => sum + r.r2, 0) / dipRates.length;
-        const totalSamples = dipRates.reduce((sum, r) => sum + r.sample_count, 0);
+        const avgDipGpm = dipRates.reduce((sum, p) => sum + p.rate_gpm, 0) / dipRates.length;
+        const totalSamples = dipRates.length;
 
         events.push({
           event_start: dipStart,
@@ -441,7 +428,7 @@ async function detectNeighborDraws(windowStart, windowEnd, tankReadings, baselin
           dip_gpm: avgDipGpm,
           estimated_neighbor_draw_gpm: baseline - avgDipGpm,
           recovered,
-          fit_quality: avgFitQuality,
+          fit_quality: null, // Not applicable for pairwise method
           sample_count: totalSamples,
         });
       }
@@ -449,8 +436,30 @@ async function detectNeighborDraws(windowStart, windowEnd, tankReadings, baselin
       // Reset for next potential dip
       inDip = false;
       dipStart = null;
-      dipStartIdx = null;
       dipRates = [];
+    }
+  }
+
+  // Handle case where dip extends to end of scan period
+  if (inDip && dipRates.length > 0) {
+    const lastPair = dipRates[dipRates.length - 1];
+    const dipEnd = lastPair.timestamp + lastPair.duration_seconds;
+    const dipDurationMin = (dipEnd - dipStart) / 60;
+
+    if (dipDurationMin >= NEIGHBOR_MIN_DIP_MINUTES) {
+      const avgDipGpm = dipRates.reduce((sum, p) => sum + p.rate_gpm, 0) / dipRates.length;
+
+      events.push({
+        event_start: dipStart,
+        event_end: dipEnd,
+        duration_minutes: dipDurationMin,
+        baseline_gpm: baseline,
+        dip_gpm: avgDipGpm,
+        estimated_neighbor_draw_gpm: baseline - avgDipGpm,
+        recovered: false, // Didn't recover within scan period
+        fit_quality: null,
+        sample_count: dipRates.length,
+      });
     }
   }
 
@@ -556,24 +565,18 @@ async function runDitchMonitor() {
     const baseline = await getRollingBaseline();
     console.log(`[DITCH-MONITOR] Rolling baseline: ${baseline.toFixed(1)} GPM (last ${BASELINE_WINDOW_COUNT} windows)`);
 
-    // STAGE 1: Neighbor-draw detection (passive logging within qualifying windows)
-    const allNeighborDraws = [];
-    for (const window of windows) {
-      if (window.isStoppage) continue; // Skip stoppage windows
-      if (window.fill_gpm < baseline * 0.5) continue; // Skip already-degraded windows
+    // STAGE 1: Neighbor-draw detection (passive logging across continuous scan period)
+    // Scan the ENTIRE period (not per-window) to catch dips that span window boundaries
+    const neighborDraws = await detectNeighborDrawsContinuous(
+      now,
+      scanStart,
+      tankReadings,
+      baseline
+    );
 
-      const neighborDraws = await detectNeighborDraws(
-        window.window_start,
-        window.window_end,
-        tankReadings,
-        baseline
-      );
-      allNeighborDraws.push(...neighborDraws);
-    }
-
-    if (allNeighborDraws.length > 0) {
-      console.log(`[DITCH-MONITOR] Detected ${allNeighborDraws.length} neighbor-draw events`);
-      await logNeighborDraws(allNeighborDraws);
+    if (neighborDraws.length > 0) {
+      console.log(`[DITCH-MONITOR] Detected ${neighborDraws.length} neighbor-draw events`);
+      await logNeighborDraws(neighborDraws);
     }
 
     // Check for alerts
