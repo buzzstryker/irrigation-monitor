@@ -11,7 +11,7 @@
 require('dotenv').config();
 
 const { supabase } = require('./db');
-const { controllers, tank } = require('./zones.config');
+const { controllers, tank, isDitchSeason } = require('./zones.config');
 const tuya = require('./tuya');
 const { depthMetersToGallons } = require('./tank-strapping');
 
@@ -240,12 +240,7 @@ async function updateTankLevel(zones) {
   }
 
   // Ditch fill (assume continuous during ditch season Apr 15 - Oct 15)
-  const now = new Date();
-  const month = now.getMonth() + 1;
-  const day = now.getDate();
-  const isDitchSeason = (month > 4 || (month === 4 && day >= 15)) &&
-                        (month < 10 || (month === 10 && day <= 15));
-  const filled = isDitchSeason ? tank.fill_rate_gpm * intervalMin : 0;
+  const filled = isDitchSeason() ? tank.fill_rate_gpm * intervalMin : 0;
 
   tankLevel = Math.min(tank.usable_gal, Math.max(0, tankLevel - consumed + filled));
 

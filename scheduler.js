@@ -154,6 +154,20 @@ cron.schedule('0 8 1 * *', async () => {
   }
 }, { timezone: TIMEZONE });
 
-console.log('[CRON] Scheduler initialized — 7 cron jobs registered');
+/**
+ * Every 2 hours — Ditch fill monitor (passive clog detection)
+ */
+cron.schedule('0 */2 * * *', async () => {
+  console.log('[CRON] Ditch fill monitor started');
+  try {
+    const { runDitchMonitor } = require('./ditch-monitor');
+    await runDitchMonitor();
+    console.log('[CRON] Ditch fill monitor complete');
+  } catch (err) {
+    console.error('[CRON] Ditch fill monitor failed:', err.message);
+  }
+}, { timezone: TIMEZONE });
+
+console.log('[CRON] Scheduler initialized — 8 cron jobs registered');
 
 module.exports = {};

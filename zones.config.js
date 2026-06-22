@@ -73,4 +73,12 @@ module.exports = {
     low_warning_gal: 450,
     fill_rate_gpm: 5.77,  // 346 GPH, 24/7 — measured 2026-05 (5 gal in 52 sec)
   },
+
+  /** Ditch season checker (Apr 15 – Oct 15) */
+  isDitchSeason(date = new Date()) {
+    const month = date.getMonth() + 1;
+    const day = date.getDate();
+    return (month > 4 || (month === 4 && day >= 15)) &&
+           (month < 10 || (month === 10 && day <= 15));
+  },
 };

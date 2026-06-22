@@ -24,7 +24,8 @@ Lenovo (always on)
 +-- server.js                  — Express port 3001, 8 endpoints
 +-- et-engine.js               — Open-Meteo fetch + Penman-Monteith ETo
 +-- et-logger.js               — Daily 2AM cron, logs actual + forecast ET
-+-- scheduler.js               — 7 cron jobs
++-- scheduler.js               — 8 cron jobs (includes ditch monitor every 2h)
++-- ditch-monitor.js           — Passive ditch-fill / clog detection (Phase 6)
 +-- coefficient-model.js       — Zone Kz model, daily target vs actual
 +-- sync.js                    — SQLite ? Supabase sync
 +-- zones.config.js            — Full zone inventory + tank constants
@@ -123,7 +124,7 @@ Lenovo (always on)
 | sms_log | 3 | All inbound/outbound SMS |
 | observations | 5 | User feedback ratings per zone |
 | scheduled_reminders | 5 | Check-in SMS schedule |
-| ditch_health_log | 6 | Daily flow meter diagnostic |
+| ditch_fill_log | 6 | Passive ditch-fill monitoring — qualifying windows (no valve, tank not full) with measured fill_gpm via linear regression. Used to detect slowdowns/clogs vs rolling baseline. |
 | tank_sensor_log | 7 | **MEASURED (authoritative)** — Tuya ME201W liquid-level depth → strapping table → gallons. Columns: timestamp (bigint epoch sec), depth_meters (raw sensor), depth_inches, level_gallons, source ('sensor'), clamped ('low'/'high'/NULL). |
 | user_preferences | — | Per-user language, phone, role |
 | flow_calibration_log | 4 | Tank-drawdown GPM calibration measurements |

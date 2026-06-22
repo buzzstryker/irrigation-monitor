@@ -212,6 +212,25 @@ CREATE TABLE IF NOT EXISTS warnings (
 );
 
 -- ──────────────────────────────────────────────
+-- Ditch Fill Log (Phase 6)
+-- ──────────────────────────────────────────────
+
+CREATE TABLE IF NOT EXISTS ditch_fill_log (
+  id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  window_start BIGINT NOT NULL,       -- Epoch seconds
+  window_end BIGINT NOT NULL,         -- Epoch seconds
+  window_minutes REAL NOT NULL,       -- Duration in minutes
+  fill_gpm REAL NOT NULL,             -- Measured fill rate (gallons per minute)
+  fit_r2 REAL NOT NULL,               -- Linear regression R² (fit quality, 0-1)
+  sample_count INTEGER NOT NULL,      -- Number of tank_sensor_log readings in window
+  gal_start REAL NOT NULL,            -- Tank level at window start
+  gal_end REAL NOT NULL,              -- Tank level at window end
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_ditch_fill_log_window_start ON ditch_fill_log(window_start DESC);
+
+-- ──────────────────────────────────────────────
 -- Zone State Log
 -- ──────────────────────────────────────────────
 
