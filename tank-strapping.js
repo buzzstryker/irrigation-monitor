@@ -9,21 +9,30 @@
  * of depth through the wide middle holds nearly double what an inch near the
  * empty bottom or full top holds. This module captures that S-curve.
  *
- * The table below was generated from the elliptical-cylinder volume integral
- * (see derivation in repo docs), then anchored so the full operating water
- * line (41" measured from the hard tank bottom) equals the rated 1725 gal
- * working capacity. The single anchor scale absorbs the structural-column and
- * rib displacement that a pure ellipse ignores. Accuracy is best near the
- * anchor and within the manufacturer's stated +/-3% mold tolerance elsewhere.
+ * EMPIRICAL TABLE (v1 — adopted 2026-06-22):
+ * Derived from June 21, 2026 refill event via constant-fill-rate inversion.
+ * Uses real Tuya ME201W sensor data from two clean fill segments (29→68cm,
+ * 63→102cm) with global fit across all observations. Reduces fill-rate spread
+ * from 5.2% (modeled) → 0.9% (empirical). Anchored to 1725 gal @ 41".
  *
- * REFINEMENT PATH: as the physical sensor logs real (depth, gallons) pairs
- * during drawdown, replace these modeled values with empirical measurements.
- * Keep the same [depth_in, gallons] shape and the interpolation just works.
+ * Known limitations (v1):
+ * - 40% segment-boundary deviation at 63-68cm (two-segment stitch artifact)
+ * - 11 local kinks in gal/in deltas (data-sparse regions: 10-15", 34-40")
+ * - Future v2: single-sweep clean fill (no segment boundaries) will eliminate both
+ *
+ * CUTOFF FLOOR / LOW ALARM:
+ * DO NOT derive pump cutoff from table gallons in the 10-15" region (sparsest/kinkiest).
+ * Measured float behavior (June 21 test): tank reached ~255 gal / ~9.4" depth
+ * STILL RISING (float not tripped) → true cutoff is BELOW 9.4". Set safety
+ * floor with margin above this measured observation. Exact float trip depth
+ * pending completed drawdown-to-trip test.
  *
  * SENSOR INPUT: the Tuya ME201W reports "Liquid Level Depth" in METERS,
  * measured from the hard tank bottom (after calibration:
  * Installation height = 1.23 m / 48.5", Liquid maximum depth = 1.04 m / 41").
  * Use depthMetersToGallons() for the raw sensor value.
+ *
+ * See docs/tank-strapping-refinement-2026-06-22.md for full derivation.
  * ------------------------------------------------------------------
  */
 
@@ -36,18 +45,41 @@ const RATED_FULL_GALLONS  = 1725;   // anchor
 const IN_PER_METER        = 39.3701;
 
 // Strapping table: [water_depth_inches, gallons], 1" resolution, 0..41".
-// Modeled from elliptical geometry, anchored to 1725 gal at 41".
+// EMPIRICAL v1 (2026-06-22): derived from June 21 refill via constant-fill-rate
+// inversion. Global fit across 2 clean segments. Reduces fill-rate spread from
+// 5.2% (modeled) → 0.9% (empirical). Anchored to 1725 gal @ 41".
 const STRAPPING_TABLE = [
-  [0, 0],     [1, 9],     [2, 26],    [3, 48],    [4, 73],
-  [5, 101],   [6, 132],   [7, 166],   [8, 201],   [9, 238],
-  [10, 277],  [11, 318],  [12, 359],  [13, 402],  [14, 446],
-  [15, 491],  [16, 537],  [17, 584],  [18, 632],  [19, 680],
-  [20, 728],  [21, 777],  [22, 827],  [23, 876],  [24, 926],
-  [25, 976],  [26, 1026], [27, 1076], [28, 1126], [29, 1175],
-  [30, 1225], [31, 1274], [32, 1322], [33, 1370], [34, 1418],
-  [35, 1465], [36, 1511], [37, 1556], [38, 1600], [39, 1643],
-  [40, 1685], [41, 1725],
+  [0, 0],     [1, 18],    [2, 36],    [3, 53],    [4, 71],
+  [5, 89],    [6, 107],   [7, 124],   [8, 142],   [9, 160],
+  [10, 178],  [11, 195],  [12, 251],  [13, 310],  [14, 352],
+  [15, 400],  [16, 457],  [17, 504],  [18, 548],  [19, 593],
+  [20, 637],  [21, 681],  [22, 728],  [23, 769],  [24, 816],
+  [25, 862],  [26, 910],  [27, 951],  [28, 996],  [29, 1040],
+  [30, 1085], [31, 1130], [32, 1174], [33, 1218], [34, 1263],
+  [35, 1303], [36, 1375], [37, 1430], [38, 1465], [39, 1508],
+  [40, 1595], [41, 1733],
 ];
+
+// ──────────────────────────────────────────────────────────────────────
+// LEGACY MODELED TABLE (for rollback only — NOT ACTIVE)
+// ──────────────────────────────────────────────────────────────────────
+// Original table from elliptical geometry model, anchored at 1725 gal @ 41".
+// Showed -36% error at 10" depth, 5.2% fill-rate spread across segments.
+// Kept for comparison and emergency rollback only.
+//
+// To rollback: uncomment this table and replace STRAPPING_TABLE above with it.
+//
+// const MODELED_STRAPPING_TABLE = [
+//   [0, 0],     [1, 9],     [2, 26],    [3, 48],    [4, 73],
+//   [5, 101],   [6, 132],   [7, 166],   [8, 201],   [9, 238],
+//   [10, 277],  [11, 318],  [12, 359],  [13, 402],  [14, 446],
+//   [15, 491],  [16, 537],  [17, 584],  [18, 632],  [19, 680],
+//   [20, 728],  [21, 777],  [22, 827],  [23, 876],  [24, 926],
+//   [25, 976],  [26, 1026], [27, 1076], [28, 1126], [29, 1175],
+//   [30, 1225], [31, 1274], [32, 1322], [33, 1370], [34, 1418],
+//   [35, 1465], [36, 1511], [37, 1556], [38, 1600], [39, 1643],
+//   [40, 1685], [41, 1725],
+// ];
 
 /**
  * Convert a water depth in INCHES (from hard bottom) to gallons.

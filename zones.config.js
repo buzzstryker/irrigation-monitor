@@ -71,7 +71,11 @@ module.exports = {
     usable_gal: 981,
     pump_cutoff_gal: 408,
     low_warning_gal: 450,
-    fill_rate_gpm: 5.77,  // 346 GPH, 24/7 — measured 2026-05 (5 gal in 52 sec)
+    // Ditch fill rate: ~7.26 GPM (436 GPH) measured via empirical strapping table
+    // (June 2026). The old 5.77 GPM (May 2026) was artificially low due to the
+    // modeled table undercounting gallons (-36% error at 10" depth). Empirical
+    // table corrects this, revealing true ditch fill rate ~7.3 GPM.
+    fill_rate_gpm: 7.26,  // 436 GPH, 24/7 — re-measured 2026-06 (empirical table)
   },
 
   /** Ditch season checker (Apr 15 – Oct 15) */
