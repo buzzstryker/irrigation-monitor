@@ -43,7 +43,10 @@ let tankLevel = tank.usable_gal;
 // Controller IDs discovered from the API (name → id mapping)
 let controllerMap = null;
 
-// Controller discovery backoff state
+// Controller discovery one-shot state
+let discoveryCompleted = false;  // true after first successful discovery — never retry customerdetails
+
+// Controller discovery backoff state (only used during startup before first success)
 let discoveryBackoffUntil = 0;  // epoch seconds — don't retry discovery before this time
 let discoveryRetryCount = 0;    // consecutive failures — drives exponential backoff
 
@@ -87,10 +90,11 @@ async function discoverControllers() {
       }
     }
 
-    // Success — reset backoff state
+    // Success — reset backoff state and mark discovery as permanently complete
     if (Object.keys(map).length > 0) {
       discoveryRetryCount = 0;
       discoveryBackoffUntil = 0;
+      discoveryCompleted = true;  // One-shot: never call customerdetails again
     }
 
     return Object.keys(map).length > 0 ? map : null;
@@ -437,32 +441,43 @@ async function poll() {
   try {
     pollCount++;
 
-    // Discover controller IDs on first poll (with backoff if rate-limited)
-    if (!controllerMap) {
+    // ONE-SHOT DISCOVERY: only attempt if not yet completed
+    // Once discovery succeeds, this block never runs again for process lifetime.
+    // Backoff gates ONLY discovery retry, never zone-state polling.
+    if (!discoveryCompleted) {
       const now = Math.floor(Date.now() / 1000);
 
       // Check backoff window — don't retry discovery if we're in backoff
       if (discoveryBackoffUntil > 0 && now < discoveryBackoffUntil) {
         const waitMin = Math.ceil((discoveryBackoffUntil - now) / 60);
         if (pollCount === 1 || pollCount % 5 === 0) {
-          console.warn(`[POLL] Controller discovery in backoff — ${waitMin} min remaining (rate limit recovery)`);
+          console.warn(`[POLL] Controller discovery in backoff — ${waitMin} min remaining (rate limit recovery). Zone polling BLOCKED until discovery succeeds.`);
         }
+        // EDGE CASE: no cached controllers yet — can't poll zones without IDs
+        // Update tank with empty zones and return (only during initial discovery backoff)
         await updateTankLevel([]);
         return;
       }
 
-      // Attempt discovery
-      controllerMap = await discoverControllers();
+      // Attempt discovery (only if not already completed)
       if (!controllerMap) {
-        const nextRetryMin = discoveryBackoffUntil > 0
-          ? Math.ceil((discoveryBackoffUntil - now) / 60)
-          : 1;
-        console.warn(`[POLL] Could not discover controllers — retry in ${nextRetryMin} min`);
-        await updateTankLevel([]);
-        return;
+        controllerMap = await discoverControllers();
+        if (!controllerMap) {
+          const nextRetryMin = discoveryBackoffUntil > 0
+            ? Math.ceil((discoveryBackoffUntil - now) / 60)
+            : 1;
+          console.warn(`[POLL] Could not discover controllers — retry in ${nextRetryMin} min. Zone polling BLOCKED until discovery succeeds.`);
+          await updateTankLevel([]);
+          return;
+        }
+        // Discovery succeeded — discoveryCompleted flag was set in discoverControllers()
+        // Fall through to zone-state polling
       }
     }
 
+    // ZONE-STATE POLLING: runs every cycle once controllers are cached
+    // This section is DECOUPLED from discovery — continues uninterrupted even if
+    // a future 429 on customerdetails (which we never call again) would trigger backoff.
     let allZones = [];
 
     // Poll each controller separately
