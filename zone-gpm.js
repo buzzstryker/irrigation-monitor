@@ -1,9 +1,12 @@
 /**
  * zone-gpm.js — Zone GPM override management (Phase 4: Supabase async)
  *
- * Provides runtime GPM override capability. zones.config.js holds defaults;
- * zone_gpm_overrides table holds operator edits. getEffectiveGpm() reads
- * override-first, falls back to config default.
+ * Provides runtime GPM override capability. zones.config.js holds:
+ *   - configured_gpm (head-count estimate, non-authoritative fallback)
+ *   - measured_gpm (tank-drawdown calibration, authoritative when present)
+ * zone_gpm_overrides table holds temporary operator edits.
+ *
+ * Priority: override > measured_gpm > configured_gpm
  *
  * All functions are now async and use Supabase client.
  */
@@ -19,7 +22,9 @@ for (const controller of zonesConfig.controllers) {
     zoneMap.set(zone.zone_id, {
       name: zone.name,
       type: zone.type,
-      gpm: zone.gpm,
+      configured_gpm: zone.configured_gpm,
+      measured_gpm: zone.measured_gpm,
+      measured_date: zone.measured_date,
       relay_id: zone.relay_id,
     });
   }
@@ -27,7 +32,8 @@ for (const controller of zonesConfig.controllers) {
 }
 
 /**
- * Get the effective GPM for a zone (override if present, else config default).
+ * Get the effective GPM for a zone.
+ * Priority: override > measured_gpm > configured_gpm
  */
 async function getEffectiveGpm(controller, zoneId) {
   // Check for override first
@@ -50,14 +56,18 @@ async function getEffectiveGpm(controller, zoneId) {
     };
   }
 
-  // Fall back to config default
+  // Fall back to measured > configured
   const controllerZones = zonesByController.get(controller);
   if (controllerZones && controllerZones.has(zoneId)) {
     const zone = controllerZones.get(zoneId);
+    const effectiveGpm = zonesConfig.getZoneGpm(zone);
+    const source = zone.measured_gpm !== null && zone.measured_gpm !== undefined
+      ? 'measured'
+      : 'configured';
     return {
-      gpm: zone.gpm,
-      source: 'config',
-      updatedAt: null,
+      gpm: effectiveGpm,
+      source,
+      updatedAt: zone.measured_date || null,
     };
   }
 
@@ -99,15 +109,23 @@ async function getAllZoneGpms() {
     for (const zone of controller.zones) {
       const key = `${controller.name}:${zone.zone_id}`;
       const override = overrides.get(key);
+      const effectiveGpm = override
+        ? override.gpm
+        : zonesConfig.getZoneGpm(zone);
+      const source = override
+        ? 'override'
+        : (zone.measured_gpm !== null && zone.measured_gpm !== undefined ? 'measured' : 'configured');
 
       result.push({
         controller: controller.name,
         zoneId: zone.zone_id,
         zoneName: zone.name,
         zoneType: zone.type,
-        configGpm: zone.gpm,
-        effectiveGpm: override ? override.gpm : zone.gpm,
-        source: override ? 'override' : 'config',
+        configuredGpm: zone.configured_gpm,
+        measuredGpm: zone.measured_gpm,
+        measuredDate: zone.measured_date,
+        effectiveGpm,
+        source,
         overrideUpdatedAt: override ? override.updatedAt : null,
         overrideReason: override ? override.reason : null,
       });

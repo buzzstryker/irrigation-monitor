@@ -11,7 +11,7 @@
 require('dotenv').config();
 
 const { supabase } = require('./db');
-const { controllers, tank, isDitchSeason } = require('./zones.config');
+const { controllers, tank, isDitchSeason, getZoneGpm } = require('./zones.config');
 const tuya = require('./tuya');
 const { depthMetersToGallons } = require('./tank-strapping');
 
@@ -153,7 +153,7 @@ function parseRelays(apiData, ctrlConfig) {
         zone_id: zone.zone_id,
         relay_id: relayId,
         name: zone.name,
-        gpm: zone.gpm,
+        gpm: getZoneGpm(zone),  // measured-primary, configured-fallback
         running,
         run_seconds: runSec,
         flow: relay.flow || 0,

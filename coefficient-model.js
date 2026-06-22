@@ -11,7 +11,7 @@
  */
 
 const { getDb, getEtByDate } = require('./db');
-const { controllers } = require('./zones.config');
+const { controllers, getZoneGpm } = require('./zones.config');
 
 const ET_SUMMER_AVG = 0.25; // in/day — reference ET for summer baseline
 
@@ -266,7 +266,7 @@ function logDailyComparison(date) {
           controller: ctrl.name,
           zone_name: zone.name,
           zone_type: zone.type,
-          gpm: zone.gpm,
+          gpm: getZoneGpm(zone),  // measured-primary, configured-fallback
           et_inches: etInches,
           kz_value: target.kz,
           target_gallons: targetGal,
