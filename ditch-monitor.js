@@ -352,28 +352,30 @@ const NEIGHBOR_SUB_WINDOW_MINUTES = 6;   // Rolling window to average out 1-cm q
 const NEIGHBOR_DIP_THRESHOLD = 0.80;     // Dip if < 80% of baseline (~5.9 GPM from ~7.3) — looser to catch diluted dips
 const NEIGHBOR_MIN_DIP_MINUTES = 8;      // Sustained for at least 8 minutes (filter transient noise)
 const NEIGHBOR_RECOVERY_THRESHOLD = 0.90; // Recovery if returns to >= 90% baseline
-const NEIGHBOR_MIN_DRAW_GPM = 1.5;       // Minimum estimated neighbor draw (reject weak noise)
+const NEIGHBOR_MIN_DRAW_GPM = 1.0;       // Minimum estimated neighbor draw (reject weak noise, allow shallow real draws)
 
 /**
- * Detect neighbor-draw events via short rolling windows + net-gallons guard.
+ * Detect neighbor-draw events via short rolling windows (valves-OFF periods only).
  * Uses 6-min rolling windows to average out 1-cm quantization noise while
- * remaining sensitive to 10–15 min real dips. Requires meaningful net gallon
- * drop to reject sensor wobbles.
+ * remaining sensitive to 10–15 min real dips. A neighbor draw is a REDUCED-BUT-
+ * STILL-POSITIVE fill rate during valves-OFF periods, never a rate above baseline
+ * or a level decline.
  *
  * @param {number} scanEnd - End of scan period (epoch seconds, typically now)
  * @param {number} scanStart - Start of scan period (epoch seconds)
  * @param {Array} tankReadings - All tank_sensor_log rows in scan period
+ * @param {Array} zoneStates - All zone_state_log rows in scan period
  * @param {number} baseline - Established baseline fill rate (GPM)
  * @returns {Array} Array of neighbor draw events
  */
-async function detectNeighborDrawsContinuous(scanEnd, scanStart, tankReadings, baseline) {
+async function detectNeighborDrawsContinuous(scanEnd, scanStart, tankReadings, zoneStates, baseline) {
   if (tankReadings.length < 5) return []; // Need enough points for rolling windows
 
   const events = [];
   const dipThreshold = baseline * NEIGHBOR_DIP_THRESHOLD;
   const subWindowSeconds = NEIGHBOR_SUB_WINDOW_MINUTES * 60;
 
-  // Compute rolling fill rates across the ENTIRE scan period
+  // Compute rolling fill rates across the ENTIRE scan period (valves-OFF windows only)
   const rollingRates = [];
   for (let i = 0; i < tankReadings.length; i++) {
     const subStart = tankReadings[i].timestamp;
@@ -385,10 +387,28 @@ async function detectNeighborDrawsContinuous(scanEnd, scanStart, tankReadings, b
 
     if (subPoints.length < 3) continue;
 
+    // CRITICAL: Check that ALL valves are OFF during this window
+    const activeValves = zoneStates.filter(z =>
+      z.timestamp >= subStart && z.timestamp <= subEnd && z.state === 1
+    );
+    if (activeValves.length > 0) {
+      // Valves were active — this is MY OWN draw, not a neighbor draw. Skip.
+      continue;
+    }
+
     const points = subPoints.map(r => ({ x: r.timestamp, y: r.level_gallons }));
     const regr = linearRegression(points);
 
     if (regr && regr.r2 >= 0.85) {  // Looser fit for sub-windows
+      // Neighbor draw constraints:
+      // 1. Fill rate must be POSITIVE (tank still rising, not declining)
+      // 2. Fill rate must be BELOW baseline (reduced fill, not faster)
+      if (regr.fill_gpm <= 0 || regr.fill_gpm >= baseline) {
+        // Negative rate = tank declining (leak/other issue)
+        // Rate >= baseline = not a neighbor draw (tank filling normally or faster)
+        continue;
+      }
+
       rollingRates.push({
         timestamp: subStart,
         fill_gpm: regr.fill_gpm,
@@ -427,11 +447,20 @@ async function detectNeighborDrawsContinuous(scanEnd, scanStart, tankReadings, b
       // End of dip - check if it qualifies
       const dipEnd = rollingRates[i - 1].timestamp + subWindowSeconds;
       const dipDurationMin = (dipEnd - dipStart) / 60;
+      const dipLevelEnd = dipRates[dipRates.length - 1].level_end;
+      const netLevelChange = dipLevelEnd - dipLevelStart;
       const avgDipGpm = dipRates.reduce((sum, r) => sum + r.fill_gpm, 0) / dipRates.length;
       const estimatedDrawGpm = baseline - avgDipGpm;
 
-      // Qualify if: (1) sustained ≥8 min, (2) draw ≥2 GPM (reject weak noise)
-      if (dipDurationMin >= NEIGHBOR_MIN_DIP_MINUTES && estimatedDrawGpm >= NEIGHBOR_MIN_DRAW_GPM) {
+      // Qualify if:
+      // (1) sustained ≥8 min
+      // (2) draw ≥1.5 GPM (reject weak noise)
+      // (3) OVERALL net level change is POSITIVE (tank rising, not draining)
+      //     Allow small negative changes (≥ -20 gal) for sensor noise, but reject large drains
+      if (dipDurationMin >= NEIGHBOR_MIN_DIP_MINUTES &&
+          estimatedDrawGpm >= NEIGHBOR_MIN_DRAW_GPM &&
+          netLevelChange >= -20) {  // Tank rising or near-flat (reject draining events)
+
         // Check if rate recovered to near-baseline
         const postDipRates = rollingRates.slice(i, Math.min(i + 3, rollingRates.length));
         const recovered = postDipRates.some(r => r.fill_gpm >= (baseline * NEIGHBOR_RECOVERY_THRESHOLD));
@@ -465,10 +494,15 @@ async function detectNeighborDrawsContinuous(scanEnd, scanStart, tankReadings, b
   if (inDip && dipRates.length > 0) {
     const dipEnd = dipRates[dipRates.length - 1].timestamp + subWindowSeconds;
     const dipDurationMin = (dipEnd - dipStart) / 60;
+    const dipLevelEnd = dipRates[dipRates.length - 1].level_end;
+    const netLevelChange = dipLevelEnd - dipLevelStart;
     const avgDipGpm = dipRates.reduce((sum, r) => sum + r.fill_gpm, 0) / dipRates.length;
     const estimatedDrawGpm = baseline - avgDipGpm;
 
-    if (dipDurationMin >= NEIGHBOR_MIN_DIP_MINUTES && estimatedDrawGpm >= NEIGHBOR_MIN_DRAW_GPM) {
+    if (dipDurationMin >= NEIGHBOR_MIN_DIP_MINUTES &&
+        estimatedDrawGpm >= NEIGHBOR_MIN_DRAW_GPM &&
+        netLevelChange >= -20) {  // Tank rising or near-flat
+
       const avgFitQuality = dipRates.reduce((sum, r) => sum + r.r2, 0) / dipRates.length;
       const totalSamples = dipRates.reduce((sum, r) => sum + r.sample_count, 0);
 
@@ -589,12 +623,25 @@ async function runDitchMonitor() {
     const baseline = await getRollingBaseline();
     console.log(`[DITCH-MONITOR] Rolling baseline: ${baseline.toFixed(1)} GPM (last ${BASELINE_WINDOW_COUNT} windows)`);
 
+    // Fetch zone states for neighbor-draw detection (valves-OFF gating)
+    const { data: zoneStates, error: zoneErr } = await supabase
+      .from('zone_state_log')
+      .select('timestamp, controller, zone_id, state')
+      .gte('timestamp', scanStart)
+      .order('timestamp', { ascending: true });
+
+    if (zoneErr) {
+      console.error('[DITCH-MONITOR] Error fetching zone_state_log:', zoneErr.message);
+      return;
+    }
+
     // STAGE 1: Neighbor-draw detection (passive logging across continuous scan period)
-    // Scan the ENTIRE period (not per-window) to catch dips that span window boundaries
+    // Scans ONLY valves-OFF periods to exclude own watering events
     const neighborDraws = await detectNeighborDrawsContinuous(
       now,
       scanStart,
       tankReadings,
+      zoneStates,
       baseline
     );
 
