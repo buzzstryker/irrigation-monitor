@@ -112,13 +112,13 @@ function runTests() {
   // ── Test 5: getDailyTarget — Barn zone (minutes-based) ──
   console.log('\nTest 5: getDailyTarget for Barn zone (no GPM)');
   {
-    const barn = getDailyTarget('Z1', 'Loomis barn', 0.25);
-    console.log(`  Barn Z1: target_minutes=${barn.target_minutes}, target_gallons=${barn.target_gallons}`);
+    const barn = getDailyTarget('Z5', 'Loomis barn', 0.25);
+    console.log(`  Barn Z5: target_minutes=${barn.target_minutes}, target_gallons=${barn.target_gallons}`);
     assert(barn.target_gallons === null, 'Barn zone returns null gallons');
-    assert(barn.target_minutes === 20, `Barn Z1 target ${barn.target_minutes} min at baseline ET (expected 20)`);
+    assert(barn.target_minutes === 20, `Barn Z5 target ${barn.target_minutes} min at baseline ET (expected 20)`);
 
-    const barnHot = getDailyTarget('Z1', 'Loomis barn', 0.35);
-    console.log(`  Barn Z1 at 0.35 ET: target_minutes=${barnHot.target_minutes}`);
+    const barnHot = getDailyTarget('Z5', 'Loomis barn', 0.35);
+    console.log(`  Barn Z5 at 0.35 ET: target_minutes=${barnHot.target_minutes}`);
     assert(barnHot.target_minutes > 25 && barnHot.target_minutes < 30, `Hot day target ${barnHot.target_minutes} min (expected ~28)`);
   }
 

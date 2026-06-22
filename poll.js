@@ -437,7 +437,10 @@ async function poll() {
     for (const ctrl of controllers) {
       const ctrlId = controllerMap[ctrl.name];
       if (!ctrlId) {
-        // Controller not found in Hydrawise account (e.g. Barn not yet registered)
+        // Controller not found in Hydrawise account — name mismatch or not registered
+        if (pollCount === 1) {
+          console.warn(`[POLL] Controller "${ctrl.name}" (id: ${ctrl.id || 'null'}) not found in discovered controllers — skipping. Check name matches Hydrawise exactly (case-sensitive).`);
+        }
         continue;
       }
 

@@ -53,14 +53,14 @@ module.exports = {
       ],
     },
     {
-      id: null,  // Barn controller ID not yet discovered
+      id: 1970558,
       name: 'Loomis barn',
       // Informational only — these fields document meter status but do not gate any runtime logic.
       // Real-time flow readings are not available via Hydrawise REST API v1 (see docs/hydrawise-api-flow-fields.md).
       hasFlowMeter: false,         // No physical meter installed
       zones: [
-        { relay_id: 1, zone_id: 'Z1', name: 'Iris & Street Front Drip', type: 'drip', gpm: null },
-        { relay_id: 2, zone_id: 'Z2', name: 'Barn Fruit Trees', type: 'drip', gpm: null },
+        { relay_id: 11518884, zone_id: 'Z5', name: 'Iris & Street Front Drip', type: 'drip', gpm: null },
+        { relay_id: 11518885, zone_id: 'Z6', name: 'Barn Fruit Trees Drip', type: 'drip', gpm: null },
       ],
     },
   ],
