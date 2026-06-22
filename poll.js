@@ -43,6 +43,10 @@ let tankLevel = tank.usable_gal;
 // Controller IDs discovered from the API (name → id mapping)
 let controllerMap = null;
 
+// Controller discovery backoff state
+let discoveryBackoffUntil = 0;  // epoch seconds — don't retry discovery before this time
+let discoveryRetryCount = 0;    // consecutive failures — drives exponential backoff
+
 // ──────────────────────────────────────────────
 // Hydrawise API
 // ──────────────────────────────────────────────
@@ -50,6 +54,9 @@ let controllerMap = null;
 /**
  * Discover controller IDs from the Hydrawise customerdetails endpoint.
  * Returns a map of controller name → controller_id.
+ *
+ * Rate limit handling: Hydrawise allows ~5 calls per 5 minutes on customerdetails.
+ * On 429 (rate limit), exponentially backs off (5min → 10min → 20min → 40min cap).
  */
 async function discoverControllers() {
   if (!API_KEY) return null;
@@ -59,7 +66,15 @@ async function discoverControllers() {
   try {
     const res = await fetch(url);
     if (!res.ok) {
-      console.error(`[POLL] Hydrawise customerdetails error: ${res.status}`);
+      if (res.status === 429) {
+        // Rate limit hit — exponential backoff: 5min → 10min → 20min → 40min (cap)
+        discoveryRetryCount++;
+        const backoffMin = Math.min(5 * Math.pow(2, discoveryRetryCount - 1), 40);
+        discoveryBackoffUntil = Math.floor(Date.now() / 1000) + (backoffMin * 60);
+        console.error(`[POLL] Hydrawise rate limit (429) on customerdetails — backing off ${backoffMin} min (retry #${discoveryRetryCount})`);
+      } else {
+        console.error(`[POLL] Hydrawise customerdetails error: ${res.status}`);
+      }
       return null;
     }
     const data = await res.json();
@@ -70,6 +85,12 @@ async function discoverControllers() {
         map[ctrl.name] = ctrl.controller_id;
         console.log(`[POLL] Discovered controller: "${ctrl.name}" (id: ${ctrl.controller_id})`);
       }
+    }
+
+    // Success — reset backoff state
+    if (Object.keys(map).length > 0) {
+      discoveryRetryCount = 0;
+      discoveryBackoffUntil = 0;
     }
 
     return Object.keys(map).length > 0 ? map : null;
@@ -416,11 +437,27 @@ async function poll() {
   try {
     pollCount++;
 
-    // Discover controller IDs on first poll
+    // Discover controller IDs on first poll (with backoff if rate-limited)
     if (!controllerMap) {
+      const now = Math.floor(Date.now() / 1000);
+
+      // Check backoff window — don't retry discovery if we're in backoff
+      if (discoveryBackoffUntil > 0 && now < discoveryBackoffUntil) {
+        const waitMin = Math.ceil((discoveryBackoffUntil - now) / 60);
+        if (pollCount === 1 || pollCount % 5 === 0) {
+          console.warn(`[POLL] Controller discovery in backoff — ${waitMin} min remaining (rate limit recovery)`);
+        }
+        await updateTankLevel([]);
+        return;
+      }
+
+      // Attempt discovery
       controllerMap = await discoverControllers();
       if (!controllerMap) {
-        console.warn('[POLL] Could not discover controllers — will retry next cycle');
+        const nextRetryMin = discoveryBackoffUntil > 0
+          ? Math.ceil((discoveryBackoffUntil - now) / 60)
+          : 1;
+        console.warn(`[POLL] Could not discover controllers — retry in ${nextRetryMin} min`);
         await updateTankLevel([]);
         return;
       }
