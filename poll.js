@@ -493,3 +493,13 @@ if (tuyaConfigured) {
 } else {
   console.warn('[TANK-SENSOR] TUYA_ACCESS_ID/SECRET/DEVICE_ID not set — measured-tank logging disabled. Modeled tank_level_log still active.');
 }
+
+// ──────────────────────────────────────────────
+// Bootstrap scheduler (cron jobs)
+// ──────────────────────────────────────────────
+
+// Railway runs poll.js directly (not server.js), so the scheduler must be
+// bootstrapped here to activate all 8 cron jobs (ditch monitor, ET logger,
+// daily reports, etc.). The scheduler module is idempotent/singleton-safe,
+// so loading it from both poll.js (production) and server.js (local dev) is fine.
+require('./scheduler');

@@ -3,7 +3,17 @@
  *
  * All times are Pacific (America/Los_Angeles).
  * Jobs log start/end and any errors.
+ *
+ * SINGLETON: Safe to require() from multiple entry points (poll.js, server.js).
+ * Cron jobs only register once globally per process, so double-loading is harmless.
  */
+
+// Singleton guard: prevent double-initialization messages if loaded twice
+if (global.__scheduler_initialized) {
+  module.exports = {};
+  return;
+}
+global.__scheduler_initialized = true;
 
 const cron = require('node-cron');
 const { getDb } = require('./db');
