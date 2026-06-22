@@ -349,10 +349,10 @@ async function fireAlert(alert) {
 // ──────────────────────────────────────────────
 
 const NEIGHBOR_SUB_WINDOW_MINUTES = 6;   // Rolling window to average out 1-cm quantization noise
-const NEIGHBOR_DIP_THRESHOLD = 0.80;     // Dip if < 80% of baseline (~5.9 GPM from ~7.3) — looser to catch diluted dips
+const NEIGHBOR_DIP_THRESHOLD = 0.75;     // Dip if < 75% of baseline (~5.5 GPM from ~7.3) — reasonable middle ground
 const NEIGHBOR_MIN_DIP_MINUTES = 8;      // Sustained for at least 8 minutes (filter transient noise)
 const NEIGHBOR_RECOVERY_THRESHOLD = 0.90; // Recovery if returns to >= 90% baseline
-const NEIGHBOR_MIN_DRAW_GPM = 1.0;       // Minimum estimated neighbor draw (reject weak noise, allow shallow real draws)
+const NEIGHBOR_MIN_DRAW_GPM = 1.0;       // Minimum estimated neighbor draw (1 GPM = meaningful, not noise)
 
 /**
  * Detect neighbor-draw events via short rolling windows (valves-OFF periods only).
