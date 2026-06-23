@@ -60,7 +60,7 @@ module.exports = {
     },
     {
       id: 1970558,
-      name: 'Loomis barn',
+      name: 'Loomis Barn',
       // Informational only — these fields document meter status but do not gate any runtime logic.
       // Real-time flow readings are not available via Hydrawise REST API v1 (see docs/hydrawise-api-flow-fields.md).
       hasFlowMeter: false,         // No physical meter installed

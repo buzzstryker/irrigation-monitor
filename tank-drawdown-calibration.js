@@ -58,7 +58,7 @@ function parseZoneSpec(zoneSpec) {
   const controllerNameMap = {
     'garage': 'Loomis Garage',
     'pool-equip': 'Loomis Pool Equipment',
-    'barn': 'Loomis barn'
+    'barn': 'Loomis Barn'
   };
   const controllerName = controllerNameMap[controllerPart.toLowerCase()];
 
