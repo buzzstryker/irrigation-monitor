@@ -57,6 +57,10 @@ let discoveryCompleted = false;  // true after first successful discovery — ne
 let discoveryBackoffUntil = 0;  // epoch seconds — don't retry discovery before this time
 let discoveryRetryCount = 0;    // consecutive failures — drives exponential backoff
 
+// Statusschedule 429 backoff state (when polling endpoints hit rate limit)
+let statusschedule429BackoffUntil = 0;  // epoch seconds — skip polling before this time
+let statusschedule429Count = 0;  // consecutive 429s — drives exponential backoff (5min → 10min → 20min → 40min cap)
+
 // ──────────────────────────────────────────────
 // Hydrawise API
 // ──────────────────────────────────────────────
@@ -114,10 +118,11 @@ async function discoverControllers() {
 /**
  * Fetch statusschedule from Hydrawise API for a specific controller.
  * If controllerId is null, fetches the default controller.
+ * Returns { data, is429 } where data is the JSON response and is429 indicates rate limit.
  */
 async function fetchStatus(controllerId) {
   if (!API_KEY) {
-    return null;
+    return { data: null, is429: false };
   }
 
   let url = `https://api.hydrawise.com/api/v1/statusschedule.php?api_key=${API_KEY}`;
@@ -127,14 +132,19 @@ async function fetchStatus(controllerId) {
 
   try {
     const res = await fetch(url);
+    if (res.status === 429) {
+      // Rate limit hit — return special indicator so poll() can back off
+      return { data: null, is429: true };
+    }
     if (!res.ok) {
       console.error(`[POLL] Hydrawise API error (controller ${controllerId || 'default'}): ${res.status}`);
-      return null;
+      return { data: null, is429: false };
     }
-    return await res.json();
+    const data = await res.json();
+    return { data, is429: false };
   } catch (err) {
     console.error(`[POLL] Hydrawise API fetch failed: ${err.message}`);
-    return null;
+    return { data: null, is429: false };
   }
 }
 
@@ -477,9 +487,22 @@ async function poll() {
     // ZONE-STATE POLLING: runs every cycle once controllers are cached
     // This section is DECOUPLED from discovery — continues uninterrupted even if
     // a future 429 on customerdetails (which we never call again) would trigger backoff.
+    const now = Math.floor(Date.now() / 1000);
     let allZones = [];
 
+    // Check if we're in statusschedule 429 backoff
+    if (statusschedule429BackoffUntil > 0 && now < statusschedule429BackoffUntil) {
+      const waitMin = Math.ceil((statusschedule429BackoffUntil - now) / 60);
+      if (pollCount === 1 || pollCount % 5 === 0) {
+        console.warn(`[POLL] Statusschedule API rate-limited (429) — backing off ${waitMin} min. Zone polling skipped this cycle.`);
+      }
+      // Skip polling this cycle but don't crash — tank level update with empty zones
+      await updateTankLevel([]);
+      return;
+    }
+
     // Poll each controller separately
+    let any429 = false;
     for (const ctrl of controllers) {
       const ctrlId = controllerMap[ctrl.name];
       if (!ctrlId) {
@@ -490,11 +513,28 @@ async function poll() {
         continue;
       }
 
-      const data = await fetchStatus(ctrlId);
+      const { data, is429 } = await fetchStatus(ctrlId);
+      if (is429) {
+        any429 = true;
+        continue;  // Skip this controller, don't crash
+      }
       if (!data) continue;
 
       const zones = parseRelays(data, ctrl);
       allZones = allZones.concat(zones);
+    }
+
+    // If any controller hit 429, set exponential backoff
+    if (any429) {
+      statusschedule429Count++;
+      const backoffMin = Math.min(5 * Math.pow(2, statusschedule429Count - 1), 40);
+      statusschedule429BackoffUntil = now + (backoffMin * 60);
+      console.warn(`[POLL] Statusschedule API rate-limited (429) on one or more controllers — backing off ${backoffMin} min (retry #${statusschedule429Count}). Zone polling will resume automatically.`);
+    } else if (statusschedule429Count > 0) {
+      // Successful poll after previous 429s — reset backoff state
+      console.log(`[POLL] Statusschedule API recovered from rate limit — zone polling resumed`);
+      statusschedule429Count = 0;
+      statusschedule429BackoffUntil = 0;
     }
 
     await processZoneStates(allZones);
@@ -514,6 +554,21 @@ async function poll() {
 // ──────────────────────────────────────────────
 // Startup
 // ──────────────────────────────────────────────
+
+// CRITICAL: Prevent crashes from unhandled promise rejections (e.g., transient API errors)
+// Railway will restart the container on crash, creating a feedback loop that deepens
+// rate limits. Log and continue instead.
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('[POLL] UNHANDLED PROMISE REJECTION — process will NOT crash');
+  console.error('Reason:', reason);
+  console.error('Promise:', promise);
+});
+
+process.on('uncaughtException', (err) => {
+  console.error('[POLL] UNCAUGHT EXCEPTION — process will NOT crash');
+  console.error('Error:', err.message);
+  console.error('Stack:', err.stack);
+});
 
 console.log('[POLL] Hydrawise polling service starting (Supabase mode)');
 console.log(`[POLL] Controllers: ${controllers.map(c => c.name).join(', ')}`);
