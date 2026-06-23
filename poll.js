@@ -41,7 +41,14 @@ const zoneState = {};  // key: "controller:zone_id" → { on: bool, startedAt: n
 let tankLevel = tank.usable_gal;
 
 // Controller IDs discovered from the API (name → id mapping)
-let controllerMap = null;
+// EMERGENCY FALLBACK: If discovery fails due to 429 rate limit, use hardcoded IDs
+// from zones.config.js so zone polling never blocks permanently. Discovery will
+// still attempt to verify/update these, but polling proceeds immediately.
+let controllerMap = {
+  'Loomis Garage': 1659477,
+  'Loomis Pool Equipment': 1977673,
+  'Loomis barn': 1970558
+};
 
 // Controller discovery one-shot state
 let discoveryCompleted = false;  // true after first successful discovery — never retry customerdetails
@@ -438,8 +445,9 @@ async function poll() {
     pollCount++;
 
     // ONE-SHOT DISCOVERY: only attempt if not yet completed
-    // Once discovery succeeds, this block never runs again for process lifetime.
-    // Backoff gates ONLY discovery retry, never zone-state polling.
+    // With the emergency fallback controllerMap initialized above, discovery failure
+    // no longer blocks zone polling. Discovery still runs to verify IDs, but polling
+    // proceeds with fallback values if discovery is rate-limited.
     if (!discoveryCompleted) {
       const now = Math.floor(Date.now() / 1000);
 
@@ -447,27 +455,22 @@ async function poll() {
       if (discoveryBackoffUntil > 0 && now < discoveryBackoffUntil) {
         const waitMin = Math.ceil((discoveryBackoffUntil - now) / 60);
         if (pollCount === 1 || pollCount % 5 === 0) {
-          console.warn(`[POLL] Controller discovery in backoff — ${waitMin} min remaining (rate limit recovery). Zone polling BLOCKED until discovery succeeds.`);
+          console.warn(`[POLL] Controller discovery in backoff — ${waitMin} min remaining (rate limit recovery). Using fallback controller IDs; zone polling continues.`);
         }
-        // EDGE CASE: no cached controllers yet — can't poll zones without IDs
-        // Update tank with empty zones and return (only during initial discovery backoff)
-        await updateTankLevel([]);
-        return;
-      }
-
-      // Attempt discovery (only if not already completed)
-      if (!controllerMap) {
-        controllerMap = await discoverControllers();
-        if (!controllerMap) {
-          const nextRetryMin = discoveryBackoffUntil > 0
-            ? Math.ceil((discoveryBackoffUntil - now) / 60)
-            : 1;
-          console.warn(`[POLL] Could not discover controllers — retry in ${nextRetryMin} min. Zone polling BLOCKED until discovery succeeds.`);
-          await updateTankLevel([]);
-          return;
+        // FALLBACK: controllerMap already initialized with hardcoded IDs — fall through to polling
+      } else {
+        // Attempt discovery (not in backoff)
+        const discovered = await discoverControllers();
+        if (discovered) {
+          // Discovery succeeded — update controllerMap and mark complete
+          controllerMap = discovered;
+          console.log(`[POLL] Discovery succeeded — verified ${Object.keys(controllerMap).length} controllers`);
+        } else {
+          // Discovery failed (429 or network error) — backoff already set in discoverControllers()
+          if (pollCount === 1 || pollCount % 5 === 0) {
+            console.warn(`[POLL] Discovery failed (will retry) — using fallback controller IDs for now`);
+          }
         }
-        // Discovery succeeded — discoveryCompleted flag was set in discoverControllers()
-        // Fall through to zone-state polling
       }
     }
 
