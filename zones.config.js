@@ -65,8 +65,12 @@ module.exports = {
       // Real-time flow readings are not available via Hydrawise REST API v1 (see docs/hydrawise-api-flow-fields.md).
       hasFlowMeter: false,         // No physical meter installed
       zones: [
-        { relay_id: 11518884, zone_id: 'Z5', name: 'Iris & Street Front Drip', type: 'drip', configured_gpm: null, measured_gpm: null, measured_date: null },
-        { relay_id: 11518885, zone_id: 'Z6', name: 'Barn Fruit Trees Drip', type: 'drip', configured_gpm: null, measured_gpm: null, measured_date: null },
+        // relay_id holds the statusschedule `relay` ORDINAL (small int), NOT the large
+        // unique `relay_id` — parseRelays matches on relay.relay (same as Garage/Pool).
+        // Barn zones sit on relay positions 5 & 6 (confirmed via scripts/discover-barn.js
+        // 2026-06-23: relay 5 → "Zone 5", relay 6 → "Zone 6"; large ids were 11518884/5).
+        { relay_id: 5, zone_id: 'Z5', name: 'Iris & Street Front Drip', type: 'drip', configured_gpm: null, measured_gpm: null, measured_date: null },
+        { relay_id: 6, zone_id: 'Z6', name: 'Barn Fruit Trees Drip', type: 'drip', configured_gpm: null, measured_gpm: null, measured_date: null },
       ],
     },
   ],
