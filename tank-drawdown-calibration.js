@@ -115,10 +115,10 @@ async function runCalibration(options = {}) {
     console.log('    - Verify no other zones active (any controller)');
     console.log(`    - Verify tank model healthy (recent data within ${POLL_RECENT_THRESHOLD_SEC}s)`);
     console.log('  SEQUENCE:');
-    console.log('    - Capture tank level t0 (most recent tank_level_log reading)');
+    console.log('    - Capture tank level t0 (most recent tank_sensor_log reading)');
     console.log(`    - Prompt: "Please start ${zone.controllerName} ${zone.zoneId} in Hydrawise UI for ${durationSec}s, press Enter"`);
     console.log(`    - Wait ${durationSec + 30}s (duration + buffer)`);
-    console.log('    - Capture tank level t1 (most recent tank_level_log reading)');
+    console.log('    - Capture tank level t1 (most recent tank_sensor_log reading)');
     console.log('  CALCULATION:');
     console.log('    - tank_drawdown_gal = level_t0 - level_t1 (NET drawdown including ditch fill)');
     console.log(`    - ditch_fill_gal = ${DITCH_FILL_GPM} GPM × (t1 - t0) / 60`);
@@ -142,7 +142,7 @@ async function runCalibration(options = {}) {
 
   // Gate 1: Tank model must be healthy (recent data)
   const { data: latestTankReading, error: tankReadError } = await supabase
-    .from('tank_level_log')
+    .from('tank_sensor_log')
     .select('level_gallons, timestamp')
     .order('timestamp', { ascending: false })
     .limit(1)
@@ -198,7 +198,7 @@ async function runCalibration(options = {}) {
 
   // Step 1: Capture tank level at t0
   const { data: t0_reading, error: t0Error } = await supabase
-    .from('tank_level_log')
+    .from('tank_sensor_log')
     .select('level_gallons, timestamp')
     .order('timestamp', { ascending: false })
     .limit(1)
@@ -247,7 +247,7 @@ async function runCalibration(options = {}) {
 
   // Step 4: Capture tank level at t1
   const { data: t1_reading, error: t1Error } = await supabase
-    .from('tank_level_log')
+    .from('tank_sensor_log')
     .select('level_gallons, timestamp')
     .order('timestamp', { ascending: false })
     .limit(1)

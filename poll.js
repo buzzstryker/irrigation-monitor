@@ -10,8 +10,9 @@
 
 require('dotenv').config();
 
-const { supabase } = require('./db');
-const { controllers, tank, isDitchSeason, getZoneGpm } = require('./zones.config');
+const { supabase, getLatestTankGallons } = require('./db');
+const { controllers, tank, getZoneGpm } = require('./zones.config');
+const { shouldWarnLowTank } = require('./tank-warning');
 const tuya = require('./tuya');
 const { depthMetersToGallons } = require('./tank-strapping');
 
@@ -38,7 +39,11 @@ const TANK_SENSOR_HEARTBEAT_MS = 20 * 60_000;  // 20 minutes
 const zoneState = {};  // key: "controller:zone_id" → { on: bool, startedAt: number }
 
 // Running tank level estimate (gallons)
-let tankLevel = tank.usable_gal;
+// Latest MEASURED tank level (gallons) from tank_sensor_log, refreshed each cycle
+// by checkLowTankWarning(). Used for the low-tank safety warning and the cycle log.
+// No modeled accumulator anymore — the old in-memory model reset to "full" on every
+// restart, which made the dry-run warning unreliable.
+let lastMeasuredGallons = null;
 
 // Controller display names discovered from the API, keyed by stable NUMERIC ID.
 // IMPORTANT: controllers are identified and polled by their numeric `id` (from
@@ -271,36 +276,28 @@ async function processZoneStates(zones) {
 }
 
 /**
- * Update the running tank level estimate (in-memory only).
- * Subtract water used by running zones, add ditch fill rate.
+ * Low-tank (pump dry-run) safety warning — driven by the latest MEASURED
+ * tank_sensor_log level, NOT a modeled estimate.
  *
- * NOTE: As of 2026-06-22, we no longer write to tank_level_log (legacy modeled table).
- * tank_sensor_log (measured Tuya ME201W) is the system-of-record. This function keeps
- * the in-memory tankLevel estimate updated for low-tank warnings, but the authoritative
- * tank level for dashboards/reports comes from tank_sensor_log.
+ * Reading the measurement from the DB every cycle means the warning reflects
+ * reality and survives process restarts (the old in-memory model reset to "full"
+ * on every start, so a real low-tank condition could go unwarned after a restart).
+ * low_warning_gal (450) and the measured level are both absolute gallons.
+ *
+ * tank_sensor_log (measured Tuya ME201W) is the system-of-record; the retired
+ * modeled tank_level_log is no longer written or read.
  */
-async function updateTankLevel(zones) {
-  const intervalMin = POLL_INTERVAL_MS / 60_000;
+async function checkLowTankWarning() {
+  const latest = await getLatestTankGallons();
+  lastMeasuredGallons = latest ? latest.level_gallons : null;
 
-  // Water consumed by all running zones this interval
-  let consumed = 0;
-  for (const z of zones) {
-    if (z.running && z.gpm) {
-      consumed += z.gpm * intervalMin;
-    }
+  const decision = shouldWarnLowTank(lastMeasuredGallons, tank.low_warning_gal);
+  if (decision === null) {
+    // No measured data available — don't raise or resolve on missing data.
+    return;
   }
 
-  // Ditch fill (assume continuous during ditch season Apr 15 - Oct 15)
-  const filled = isDitchSeason() ? tank.fill_rate_gpm * intervalMin : 0;
-
-  tankLevel = Math.min(tank.usable_gal, Math.max(0, tankLevel - consumed + filled));
-
-  // Legacy tank_level_log write removed 2026-06-22 — was causing PK violations,
-  // and tank_sensor_log (measured) is now authoritative. In-memory tankLevel still
-  // tracks for low-tank warnings (until warnings switch to tank_sensor_log queries).
-
-  // Warn if tank is low
-  if (tankLevel < tank.low_warning_gal) {
+  if (decision === true) {
     const { data: existing, error: checkError } = await supabase
       .from('warnings')
       .select('id')
@@ -315,18 +312,18 @@ async function updateTankLevel(zones) {
         .from('warnings')
         .insert({
           type: 'low_tank',
-          message: `Tank level critically low: ${Math.round(tankLevel)} gal (threshold: ${tank.low_warning_gal} gal)`,
+          message: `Tank level critically low: ${Math.round(lastMeasuredGallons)} gal measured (threshold: ${tank.low_warning_gal} gal)`,
           resolved: 0
         });
 
       if (warnError) {
         console.error(`[POLL] Error creating warning: ${warnError.message}`);
       } else {
-        console.warn(`[POLL] ⚠ TANK LOW: ${Math.round(tankLevel)} gal`);
+        console.warn(`[POLL] ⚠ TANK LOW: ${Math.round(lastMeasuredGallons)} gal (measured)`);
       }
     }
   } else {
-    // Resolve low tank warning if level recovered
+    // Resolve low tank warning if measured level has recovered.
     const { error: resolveError } = await supabase
       .from('warnings')
       .update({ resolved: 1 })
@@ -501,8 +498,8 @@ async function poll() {
       if (pollCount === 1 || pollCount % 5 === 0) {
         console.warn(`[POLL] Statusschedule API rate-limited (429) — backing off ${waitMin} min. Zone polling skipped this cycle.`);
       }
-      // Skip polling this cycle but don't crash — tank level update with empty zones
-      await updateTankLevel([]);
+      // Skip polling this cycle but don't crash — still run the measured low-tank check
+      await checkLowTankWarning();
       return;
     }
 
@@ -554,12 +551,13 @@ async function poll() {
     }
 
     await processZoneStates(allZones);
-    await updateTankLevel(allZones);
+    await checkLowTankWarning();
 
     // Log every poll on first cycle, then every 5 minutes
     const running = allZones.filter(z => z.running);
     if (pollCount === 1 || pollCount % 5 === 0) {
-      console.log(`[POLL] Cycle #${pollCount} | Tank: ${Math.round(tankLevel)} gal | Zones polled: ${allZones.length} | Running: ${running.length}`);
+      const tankStr = lastMeasuredGallons != null ? `${Math.round(lastMeasuredGallons)} gal (measured)` : 'no data';
+      console.log(`[POLL] Cycle #${pollCount} | Tank: ${tankStr} | Zones polled: ${allZones.length} | Running: ${running.length}`);
     }
   } catch (err) {
     console.error(`[POLL] Poll cycle error: ${err.message}`);

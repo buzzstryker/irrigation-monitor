@@ -103,12 +103,7 @@ async function syncAll() {
     }),
   });
 
-  await syncTable('tank_level_log', {
-    transform: (row) => ({
-      ...row,
-      timestamp: epochToISO(row.timestamp),
-    }),
-  });
+  // tank_level_log sync removed — retired modeled table (no longer written).
 
   await syncTable('observations', {
     transform: (row) => ({

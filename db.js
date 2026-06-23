@@ -56,6 +56,29 @@ async function upsertEtLog(row) {
 }
 
 /**
+ * Get the latest MEASURED tank reading from tank_sensor_log (the authoritative
+ * source since the Tuya ME201W cutover). Returns { level_gallons, timestamp }
+ * (timestamp = bigint epoch seconds) or null when no rows exist.
+ *
+ * Use this anywhere you need "current tank level" — NEVER read tank_level_log
+ * (retired modeled table; poll.js stopped writing it 2026-06-22, so it is frozen).
+ */
+async function getLatestTankGallons() {
+  const { data, error } = await supabase
+    .from('tank_sensor_log')
+    .select('level_gallons, timestamp')
+    .order('timestamp', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (error) {
+    console.error(`[DB] getLatestTankGallons error: ${error.message}`);
+    return null;
+  }
+  return data || null;
+}
+
+/**
  * Get ET log entry by date (async version)
  */
 async function getEtByDate(date) {
@@ -76,4 +99,4 @@ async function getEtByDate(date) {
   return data;
 }
 
-module.exports = { getDb, upsertEtLog, getEtByDate, supabase };
+module.exports = { getDb, upsertEtLog, getEtByDate, getLatestTankGallons, supabase };

@@ -52,11 +52,11 @@ app.get('/api/status', async (req, res) => {
   try {
     const today = new Date().toISOString().slice(0, 10);
 
-    // Get latest tank level
+    // Get latest tank level (MEASURED — tank_sensor_log; tank_level_log is retired/frozen)
     const { data: tankData, error: tankError } = await supabase
-      .from('tank_level_log')
+      .from('tank_sensor_log')
       .select('level_gallons, source, timestamp')
-      .order('id', { ascending: false })
+      .order('timestamp', { ascending: false })
       .limit(1)
       .single();
 
@@ -138,11 +138,13 @@ app.get('/api/dashboard/health', async (req, res) => {
   try {
     const now = Math.floor(Date.now() / 1000);
 
-    // Last poll: most recent tank_level_log entry (poll.js writes every 60s)
+    // Last poll: most recent tank_sensor_log entry. The Tuya sensor logs on change
+    // or at least every ~20 min (heartbeat), so it's the canonical "system alive"
+    // signal now that tank_level_log is retired/frozen.
     const { data: lastPollRow, error: pollError } = await supabase
-      .from('tank_level_log')
+      .from('tank_sensor_log')
       .select('timestamp')
-      .order('id', { ascending: false })
+      .order('timestamp', { ascending: false })
       .limit(1)
       .maybeSingle();
 
@@ -182,11 +184,11 @@ app.get('/api/dashboard/health', async (req, res) => {
       };
     }
 
-    // Last tank level: same as lastPoll but include level
+    // Last tank level: same as lastPoll but include level (MEASURED)
     const { data: lastTankRow, error: tankError } = await supabase
-      .from('tank_level_log')
+      .from('tank_sensor_log')
       .select('timestamp, level_gallons')
-      .order('id', { ascending: false })
+      .order('timestamp', { ascending: false })
       .limit(1)
       .maybeSingle();
 
@@ -200,8 +202,9 @@ app.get('/api/dashboard/health', async (req, res) => {
       level_gallons: lastTankRow.level_gallons
     } : null;
 
-    // Health flags
-    const pollHealthy = lastPoll ? lastPoll.secondsAgo < 90 : false;
+    // Health flags. tank_sensor_log logs on change or at least every ~20 min
+    // (heartbeat), so allow up to 25 min before flagging the poller as stale.
+    const pollHealthy = lastPoll ? lastPoll.secondsAgo < 1500 : false;
     const dbReachable = true; // if we got here, db is reachable
 
     res.json({
@@ -291,9 +294,9 @@ app.get('/api/dashboard/tank', async (req, res) => {
     const now = Math.floor(Date.now() / 1000);
     const rangeStart = now - (hours * 3600);
 
-    // Query tank_level_log
+    // Query tank_sensor_log (MEASURED; tank_level_log is retired/frozen)
     const { data: rows, error } = await supabase
-      .from('tank_level_log')
+      .from('tank_sensor_log')
       .select('timestamp, level_gallons, source')
       .gte('timestamp', rangeStart)
       .order('timestamp', { ascending: true });
@@ -318,7 +321,9 @@ app.get('/api/dashboard/tank', async (req, res) => {
       rangeEnd: new Date(now * 1000).toISOString(),
       count: estimates.length,
       thresholds: {
-        maxUsable: tank.usable_gal,
+        // Measured level is absolute (0–capacity), so report physical capacity here,
+        // not usable_gal (981, the old modeled-scale max).
+        maxUsable: tank.capacity_gal,
         safetyFloor: tank.low_warning_gal,
         pumpCutoff: tank.pump_cutoff_gal
       }
@@ -457,19 +462,8 @@ app.post('/webhook/sensor', async (req, res) => {
       return res.status(500).json({ error: 'Failed to log sensor data' });
     }
 
-    // Also update tank_level_log with sensor reading
-    if (level_gallons != null) {
-      const { error: tankError } = await supabase
-        .from('tank_level_log')
-        .insert({
-          level_gallons: level_gallons,
-          source: 'sensor'
-        });
-
-      if (tankError) {
-        console.error('[SENSOR] Error logging to tank_level_log:', tankError.message);
-      }
-    }
+    // (Removed legacy tank_level_log dual-write — that table is retired; tank_sensor_log
+    // above is authoritative.)
 
     console.log(`[SENSOR] Tank reading: depth=${depth_inches}in, level=${level_gallons}gal`);
     res.json({ status: 'ok', received: { depth_inches, level_gallons } });
