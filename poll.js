@@ -249,9 +249,13 @@ async function processZoneStates(zones) {
 }
 
 /**
- * Update the running tank level estimate.
+ * Update the running tank level estimate (in-memory only).
  * Subtract water used by running zones, add ditch fill rate.
- * Log to tank_level_log (async).
+ *
+ * NOTE: As of 2026-06-22, we no longer write to tank_level_log (legacy modeled table).
+ * tank_sensor_log (measured Tuya ME201W) is the system-of-record. This function keeps
+ * the in-memory tankLevel estimate updated for low-tank warnings, but the authoritative
+ * tank level for dashboards/reports comes from tank_sensor_log.
  */
 async function updateTankLevel(zones) {
   const intervalMin = POLL_INTERVAL_MS / 60_000;
@@ -269,17 +273,9 @@ async function updateTankLevel(zones) {
 
   tankLevel = Math.min(tank.usable_gal, Math.max(0, tankLevel - consumed + filled));
 
-  // Log tank level
-  const { error: tankError } = await supabase
-    .from('tank_level_log')
-    .insert({
-      level_gallons: Math.round(tankLevel * 10) / 10,
-      source: 'calculated'
-    });
-
-  if (tankError) {
-    console.error(`[POLL] Error logging tank level: ${tankError.message}`);
-  }
+  // Legacy tank_level_log write removed 2026-06-22 — was causing PK violations,
+  // and tank_sensor_log (measured) is now authoritative. In-memory tankLevel still
+  // tracks for low-tank warnings (until warnings switch to tank_sensor_log queries).
 
   // Warn if tank is low
   if (tankLevel < tank.low_warning_gal) {
@@ -543,7 +539,7 @@ if (tuyaConfigured) {
   pollTankSensor();
   setInterval(pollTankSensor, TANK_SENSOR_INTERVAL_MS);
 } else {
-  console.warn('[TANK-SENSOR] TUYA_ACCESS_ID/SECRET/DEVICE_ID not set — measured-tank logging disabled. Modeled tank_level_log still active.');
+  console.warn('[TANK-SENSOR] TUYA_ACCESS_ID/SECRET/DEVICE_ID not set — measured-tank logging disabled. In-memory tank tracking active for low-tank warnings only.');
 }
 
 // ──────────────────────────────────────────────
