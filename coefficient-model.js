@@ -45,8 +45,8 @@ const SUMMER_BASELINE = {
   'Loomis Pool Equipment:Z11': { gallons: 100.0, minutes: 10 },
 
   // Barn (no GPM — use minutes only; gallons estimated later when GPM known)
-  'Loomis Barn:Z5': { gallons: null, minutes: 20 },
-  'Loomis Barn:Z6': { gallons: null, minutes: 20 },
+  'Loomis barn:Z5': { gallons: null, minutes: 20 },
+  'Loomis barn:Z6': { gallons: null, minutes: 20 },
 };
 
 // ──────────────────────────────────────────────
