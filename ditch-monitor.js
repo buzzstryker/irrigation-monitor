@@ -23,7 +23,13 @@ const { tank, isDitchSeason } = require('./zones.config');
 const MIN_WINDOW_SECONDS = 30 * 60;  // 30 minutes
 const MIN_SAMPLE_COUNT = 8;          // At least 8 tank_sensor_log readings
 const MIN_R2 = 0.9;                  // Linear fit quality threshold
-const TANK_FULL_THRESHOLD = tank.usable_gal * 0.95;  // 95% of usable capacity
+// "Near full" must be measured against PHYSICAL capacity (~1639 gal), because
+// tank_sensor_log.level_gallons is ABSOLUTE gallons (0–1725) from the strapping
+// table. This used to be usable_gal*0.95 (≈932) back when the monitor read the
+// modeled tank_level_log on the 0–981 "usable" scale. After the measured-sensor
+// cutover that 932 cap silently rejected the entire normal operating range
+// (932–1638 gal), so almost no windows qualified and ditch logging dried up.
+const TANK_FULL_THRESHOLD = tank.capacity_gal * 0.95;  // 95% of physical capacity (~1639 gal)
 
 // Rolling baseline config
 const BASELINE_WINDOW_COUNT = 10;    // Last N qualifying windows for median
