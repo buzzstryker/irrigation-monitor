@@ -40,14 +40,18 @@ const zoneState = {};  // key: "controller:zone_id" → { on: bool, startedAt: n
 // Running tank level estimate (gallons)
 let tankLevel = tank.usable_gal;
 
-// Controller IDs discovered from the API (name → id mapping)
-// EMERGENCY FALLBACK: If discovery fails due to 429 rate limit, use hardcoded IDs
-// from zones.config.js so zone polling never blocks permanently. Discovery will
-// still attempt to verify/update these, but polling proceeds immediately.
-let controllerMap = {
-  'Loomis Garage': 1659477,
-  'Loomis Pool Equipment': 1977673,
-  'Loomis barn': 1970558
+// Controller display names discovered from the API, keyed by stable NUMERIC ID.
+// IMPORTANT: controllers are identified and polled by their numeric `id` (from
+// zones.config.js), NEVER by name. The Hydrawise-reported name is a mutable,
+// case-sensitive string ("Loomis barn" vs "Loomis Barn") and must only be used
+// as a human-readable label. This map exists purely to attach a fresh display
+// name to each id for logs/diagnostics — it is never a lookup/matching key.
+// EMERGENCY FALLBACK: seeded from zones.config.js so logs have a name even if
+// discovery is rate-limited; polling uses ctrl.id regardless.
+let discoveredNames = {
+  1659477: 'Loomis Garage',
+  1977673: 'Loomis Pool Equipment',
+  1970558: 'Loomis barn'
 };
 
 // Controller discovery one-shot state
@@ -66,8 +70,8 @@ let statusschedule429Count = 0;  // consecutive 429s — drives exponential back
 // ──────────────────────────────────────────────
 
 /**
- * Discover controller IDs from the Hydrawise customerdetails endpoint.
- * Returns a map of controller name → controller_id.
+ * Discover controllers from the Hydrawise customerdetails endpoint.
+ * Returns a map of controller_id (numeric) → controller name (display label).
  *
  * Rate limit handling: Hydrawise allows ~5 calls per 5 minutes on customerdetails.
  * On 429 (rate limit), exponentially backs off (5min → 10min → 20min → 40min cap).
@@ -96,7 +100,8 @@ async function discoverControllers() {
 
     if (data.controllers && Array.isArray(data.controllers)) {
       for (const ctrl of data.controllers) {
-        map[ctrl.name] = ctrl.controller_id;
+        // Key by stable numeric id; the name is only a display label.
+        map[ctrl.controller_id] = ctrl.name;
         console.log(`[POLL] Discovered controller: "${ctrl.name}" (id: ${ctrl.controller_id})`);
       }
     }
@@ -455,9 +460,9 @@ async function poll() {
     pollCount++;
 
     // ONE-SHOT DISCOVERY: only attempt if not yet completed
-    // With the emergency fallback controllerMap initialized above, discovery failure
-    // no longer blocks zone polling. Discovery still runs to verify IDs, but polling
-    // proceeds with fallback values if discovery is rate-limited.
+    // Discovery is now purely cosmetic — it refreshes the id→name display labels.
+    // Polling targets ctrl.id (stable numeric) from zones.config.js regardless, so
+    // discovery failure (e.g. 429 rate limit) never blocks zone polling.
     if (!discoveryCompleted) {
       const now = Math.floor(Date.now() / 1000);
 
@@ -467,18 +472,18 @@ async function poll() {
         if (pollCount === 1 || pollCount % 5 === 0) {
           console.warn(`[POLL] Controller discovery in backoff — ${waitMin} min remaining (rate limit recovery). Using fallback controller IDs; zone polling continues.`);
         }
-        // FALLBACK: controllerMap already initialized with hardcoded IDs — fall through to polling
+        // FALLBACK: discoveredNames seeded with display labels — fall through to polling
       } else {
         // Attempt discovery (not in backoff)
         const discovered = await discoverControllers();
         if (discovered) {
-          // Discovery succeeded — update controllerMap and mark complete
-          controllerMap = discovered;
-          console.log(`[POLL] Discovery succeeded — verified ${Object.keys(controllerMap).length} controllers`);
+          // Discovery succeeded — refresh id→name display labels and mark complete
+          discoveredNames = discovered;
+          console.log(`[POLL] Discovery succeeded — refreshed ${Object.keys(discoveredNames).length} controller names`);
         } else {
           // Discovery failed (429 or network error) — backoff already set in discoverControllers()
           if (pollCount === 1 || pollCount % 5 === 0) {
-            console.warn(`[POLL] Discovery failed (will retry) — using fallback controller IDs for now`);
+            console.warn(`[POLL] Discovery failed (will retry) — using seeded controller names for now`);
           }
         }
       }
@@ -504,14 +509,20 @@ async function poll() {
     // Poll each controller separately
     let any429 = false;
     for (const ctrl of controllers) {
-      const ctrlId = controllerMap[ctrl.name];
+      // Identify the controller by its STABLE NUMERIC ID, never by name. The id is
+      // an immutable integer in zones.config.js; the name is a mutable, case-sensitive
+      // label that has repeatedly broken polling ("Loomis barn" vs "Loomis Barn").
+      const ctrlId = ctrl.id;
       if (!ctrlId) {
-        // Controller not found in Hydrawise account — name mismatch or not registered
+        // Misconfiguration: a controller in zones.config.js has no numeric id.
         if (pollCount === 1) {
-          console.warn(`[POLL] Controller "${ctrl.name}" (id: ${ctrl.id || 'null'}) not found in discovered controllers — skipping. Check name matches Hydrawise exactly (case-sensitive).`);
+          console.warn(`[POLL] Controller "${ctrl.name}" has no numeric id in zones.config.js — skipping.`);
         }
         continue;
       }
+
+      // Display label only — prefer the freshly discovered name, fall back to config.
+      const displayName = discoveredNames[ctrlId] || ctrl.name;
 
       const { data, is429 } = await fetchStatus(ctrlId);
       if (is429) {
@@ -522,6 +533,11 @@ async function poll() {
 
       const zones = parseRelays(data, ctrl);
       allZones = allZones.concat(zones);
+
+      // First cycle: confirm each controller polled by stable id (name is label only).
+      if (pollCount === 1) {
+        console.log(`[POLL] Polled controller id ${ctrlId} ("${displayName}") — ${zones.length} zones`);
+      }
     }
 
     // If any controller hit 429, set exponential backoff
