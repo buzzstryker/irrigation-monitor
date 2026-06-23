@@ -81,6 +81,65 @@ function linearRegression(points) {
   return { slope, intercept, r2, fill_gpm };
 }
 
+/**
+ * Determine whether ANY zone (any controller) was ON at any point during
+ * [windowStart, windowEnd].
+ *
+ * zone_state_log is TRANSITION-only ('on'/'off' rows), so a simple
+ * "is there an 'on' row inside the window" test (the old, broken logic) misses
+ * a zone that turned on BEFORE the window and is still running across it. This
+ * uses interval-overlap semantics instead: a zone is active in the window if
+ * EITHER
+ *   - its state as of windowStart is already 'on' (last transition at/before
+ *     windowStart was 'on'), OR
+ *   - it has any 'on' transition inside (windowStart, windowEnd].
+ *
+ * The window is "valves-off" (safe for ditch fill / neighbor-draw measurement)
+ * only when this returns false for every zone on every controller.
+ *
+ * NOTE: the previous implementation compared `z.state === 1`, but the column is
+ * the TEXT 'on'/'off' — so it was always false and valve gating never engaged.
+ *
+ * @param {number} windowStart epoch seconds
+ * @param {number} windowEnd   epoch seconds
+ * @param {Array}  zoneStates  full transition list for the scan period;
+ *                             rows: { timestamp, controller, zone_id, state }
+ * @returns {boolean} true if any valve was open during the window
+ */
+function isAnyValveActive(windowStart, windowEnd, zoneStates) {
+  // Group transitions per zone (controller:zone_id).
+  const byZone = new Map();
+  for (const z of zoneStates) {
+    const key = `${z.controller}:${z.zone_id}`;
+    let arr = byZone.get(key);
+    if (!arr) { arr = []; byZone.set(key, arr); }
+    arr.push(z);
+  }
+
+  for (const transitions of byZone.values()) {
+    // Defensive sort (the Supabase query already orders ascending).
+    transitions.sort((a, b) => a.timestamp - b.timestamp);
+
+    // State as of windowStart = the last transition at or before windowStart.
+    // Default 'off' when the zone has no prior transition in the scan window.
+    let stateAtStart = 'off';
+    for (const t of transitions) {
+      if (t.timestamp <= windowStart) stateAtStart = t.state;
+      else break;
+    }
+    if (stateAtStart === 'on') return true; // running when the window opened
+
+    // Any 'on' transition strictly inside the window?
+    for (const t of transitions) {
+      if (t.timestamp > windowStart && t.timestamp <= windowEnd && t.state === 'on') {
+        return true;
+      }
+    }
+  }
+
+  return false;
+}
+
 // ──────────────────────────────────────────────
 // Qualifying Window Detection
 // ──────────────────────────────────────────────
@@ -98,11 +157,9 @@ function linearRegression(points) {
  * or { qualified: false, reason: 'valve_active' | 'tank_full' | ... }
  */
 async function checkWindow(windowStart, windowEnd, tankReadings, zoneStates) {
-  // Criterion 1: No valve activity
-  const activeZones = zoneStates.filter(z =>
-    z.timestamp >= windowStart && z.timestamp <= windowEnd && z.state === 1
-  );
-  if (activeZones.length > 0) {
+  // Criterion 1: No valve activity (interval-overlap — also catches a zone that
+  // was already running when the window opened, not just transitions inside it).
+  if (isAnyValveActive(windowStart, windowEnd, zoneStates)) {
     return { qualified: false, reason: 'valve_active' };
   }
 
@@ -393,11 +450,9 @@ async function detectNeighborDrawsContinuous(scanEnd, scanStart, tankReadings, z
 
     if (subPoints.length < 3) continue;
 
-    // CRITICAL: Check that ALL valves are OFF during this window
-    const activeValves = zoneStates.filter(z =>
-      z.timestamp >= subStart && z.timestamp <= subEnd && z.state === 1
-    );
-    if (activeValves.length > 0) {
+    // CRITICAL: Check that ALL valves are OFF for the whole sub-window
+    // (interval-overlap — a zone running across the sub-window boundary counts).
+    if (isAnyValveActive(subStart, subEnd, zoneStates)) {
       // Valves were active — this is MY OWN draw, not a neighbor draw. Skip.
       continue;
     }
@@ -674,4 +729,4 @@ async function runDitchMonitor() {
   }
 }
 
-module.exports = { runDitchMonitor };
+module.exports = { runDitchMonitor, isAnyValveActive };
