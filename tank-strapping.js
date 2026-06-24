@@ -179,7 +179,7 @@ if (require.main === module) {
     ['empty 0"', () => depthInchesToGallons(0).gallons, 0],
     ['sensor 1.04m (full)', () => depthMetersToGallons(1.04).gallons, null],
     ['450 gal floor -> in', () => gallonsToDepthInches(450), null],
-    ['408 gal cutoff -> in', () => gallonsToDepthInches(408), null],
+    ['119 gal cutoff -> in', () => gallonsToDepthInches(119), null],
   ];
   console.log('tank-strapping self-test\n');
   for (const [label, fn, expect] of checks) {
@@ -194,5 +194,5 @@ if (require.main === module) {
   }
   console.log(`\n  monotonic increasing: ${mono ? 'PASS' : 'FAIL'}`);
   console.log(`  450 gal -> ${depthInchesToDeviceRatio(gallonsToDepthInches(450)).toFixed(1)}% device ratio`);
-  console.log(`  408 gal -> ${depthInchesToDeviceRatio(gallonsToDepthInches(408)).toFixed(1)}% device ratio`);
+  console.log(`  119 gal -> ${depthInchesToDeviceRatio(gallonsToDepthInches(119)).toFixed(1)}% device ratio`);
 }

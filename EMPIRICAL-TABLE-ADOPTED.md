@@ -88,18 +88,17 @@ These are **documented but non-blocking** for deployment:
 **Use measured float behavior instead:**
 
 - **June 21 test:** Tank reached ~255 gal / ~9.4" depth **STILL RISING** (float not tripped)
-- **Conclusion:** True pump cutoff is **BELOW 9.4"**
-- **Action:** Set safety floor with margin above 9.4" measured observation, NOT table extrapolation
-
-**Exact float trip depth:** Pending completed drawdown-to-trip test to pin precisely.
+- **June 22 test (RESOLVED):** Controlled drawdown-to-float-trip measured the dry-run float
+  tripping at **~119 gal**. This is the real pump cutoff (below 9.4", as predicted).
+- **Action:** Safety floor (450 gal) now sits a healthy 331 gal above the measured 119 cutoff.
 
 **Current config** (zones.config.js):
 ```javascript
-pump_cutoff_gal: 408,      // Legacy value — NEEDS RE-TEST with empirical table
-low_warning_gal: 450,      // Safety floor (above measured 255 gal @ 9.4")
+pump_cutoff_gal: 119,      // MEASURED 2026-06-22 drawdown-to-float-trip (was legacy 408)
+low_warning_gal: 450,      // Safety floor — 331 gal above the measured cutoff
 ```
 
-**TODO:** Run a controlled drawdown-to-float-trip test to measure exact cutoff with the empirical table.
+**~~TODO: Run a controlled drawdown-to-float-trip test~~ DONE 2026-06-22 → 119 gal.**
 
 ---
 

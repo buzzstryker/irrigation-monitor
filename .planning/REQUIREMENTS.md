@@ -101,7 +101,7 @@
 
 **NFR4.1 — Safety**
 - Tank safety floor: 450 gal minimum (never schedule below this)
-- Pump cutoff protection: stop if tank drops to 408 gal (dry-run sensor threshold)
+- Pump cutoff protection: dry-run float trips at ~119 gal (MEASURED 2026-06-22; safety floor 450 gal keeps well clear)
 - Ditch water season enforcement: Apr 15 - Oct 15 only (no city water usage outside Barn location)
 
 **NFR4.2 — Fault Tolerance**

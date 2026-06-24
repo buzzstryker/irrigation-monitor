@@ -55,7 +55,7 @@ Lenovo (always on)
 |-----------|-------|
 | Location | Loomis, CA (lat: 38.8024, lon: -121.1964, elevation: 122m) |
 | Tank capacity | 1,725 gal total, 981 gal usable |
-| Pump cutoff | ~408 gal (dry-run sensor) |
+| Pump cutoff | ~119 gal (dry-run float — MEASURED 2026-06-22 drawdown-to-trip test; was est. 408) |
 | Ditch fill rate | 5.77 GPM (346 GPH, 24/7) — measured 2026-05 |
 | Ditch water season | April 15 – October 15 |
 | City water season | March 15 – April 14 (BARN LOCATION ONLY) |
@@ -169,7 +169,7 @@ This is the manually-entered Hydrawise schedule to use until Phase 4 takes contr
 **Pool Equip Program B (1:00 AM):** Z1 20min, Z7 7min, Z8 7min
 **Pool Equip Program C (9:00 PM):** Z9 10min, Z10 10min, Z11 10min
 
-**Tank minimum:** 780 gal at 9:29 PM (80% usable, 372 gal above pump cutoff)
+**Tank minimum:** 780 gal at 9:29 PM (80% usable, 661 gal above the measured 119 gal pump cutoff)
 
 ### Spring (Mar 15 – May 15) — ~1,025 gal/day
 Same timing, sod zones × 0.67 duration, drips unchanged.

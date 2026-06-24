@@ -79,8 +79,9 @@ module.exports = {
   tank: {
     capacity_gal: 1725,
     usable_gal: 981,
-    pump_cutoff_gal: 408,
-    low_warning_gal: 450,
+    pump_cutoff_gal: 119,   // MEASURED 2026-06-22 via controlled drawdown-to-float-trip test.
+                            // Was 408 (legacy estimate); the real dry-run float trips at ~119 gal.
+    low_warning_gal: 450,   // Safety floor — now 331 gal above the measured 119 cutoff (was only 42 above 408).
     // Ditch fill rate: ~7.26 GPM (436 GPH) measured via empirical strapping table
     // (June 2026). The old 5.77 GPM (May 2026) was artificially low due to the
     // modeled table undercounting gallons (-36% error at 10" depth). Empirical

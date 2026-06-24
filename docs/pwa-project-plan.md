@@ -23,7 +23,7 @@ Status: Planning. No code exists yet.
 - One-page dashboard, mobile-first stacked layout
 - Three sections:
   1. **Service health strip** — last poll timestamp, last watering event, last tank reading. Color-coded for freshness (green/yellow/red).
-  2. **Tank level chart** — last 24 hours of tank_level_log data, with threshold lines at 981 (max), 450 (safety floor), 408 (pump cutoff).
+  2. **Tank level chart** — last 24 hours of tank_sensor_log data, with threshold lines at 1725 (capacity), 450 (safety floor), 119 (pump cutoff, measured 2026-06-22).
   3. **Recent watering events table** — last 7 days, sortable on date column. Six columns: When, Controller, Zone (id+name), Duration, Gallons (calc), Calc GPM.
 - "Add to Home Screen" support (manifest.json, icons, service worker for offline shell caching)
 - Pull-to-refresh and manual refresh button
