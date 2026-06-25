@@ -184,6 +184,7 @@ function parseRelays(apiData, ctrlConfig) {
         running,
         run_seconds: runSec,
         flow: relay.flow || 0,
+        type: relay.type ?? null,   // raw Hydrawise relay.type (106 while running, 1 idle); ?? keeps a literal 0
       });
     }
   }
@@ -208,8 +209,10 @@ async function processZoneStates(zones) {
     const isOn = z.running;
 
     if (isOn && (!prev || !prev.on)) {
-      // Zone just turned ON
-      zoneState[key] = { on: true, startedAt: now };
+      // Zone just turned ON. Stash the relay `type` seen WHILE running (e.g. 106).
+      // Must capture here, not at the OFF poll: once the zone stops the relay reports
+      // its idle type (1), so reading it at OFF would record the wrong value.
+      zoneState[key] = { on: true, startedAt: now, runType: z.type ?? null };
 
       const { error } = await supabase
         .from('zone_state_log')
@@ -262,6 +265,7 @@ async function processZoneStates(zones) {
           gallons: gallons,
           flow_gpm: z.flow || null,
           source: 'scheduled',
+          hydrawise_type: prev.runType ?? null,  // raw type seen while running; interpret post-travel
           flow_source: 'calculated',
           flow_quality: 'calculated'
         });

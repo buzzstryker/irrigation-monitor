@@ -93,6 +93,7 @@ CREATE TABLE IF NOT EXISTS watering_events (
   gallons REAL,
   flow_gpm REAL,
   source TEXT CHECK(source IN ('scheduled','manual','system')) DEFAULT 'scheduled',
+  hydrawise_type INTEGER,  -- raw Hydrawise relay.type seen WHILE running (e.g. 106 for API/setzone runs); for scheduled-vs-manual disambiguation, interpret post-travel
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
