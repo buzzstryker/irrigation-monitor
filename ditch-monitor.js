@@ -44,6 +44,41 @@ const SCAN_DAYS = 7;                 // Analyze last 7 days
 const WINDOW_DURATIONS = [30, 60, 90, 120]; // Attempt these durations (minutes)
 
 // ──────────────────────────────────────────────
+// Data access
+// ──────────────────────────────────────────────
+
+/**
+ * Fetch ALL rows of `table` where `tsColumn >= sinceEpoch`, ascending, paginating
+ * past PostgREST's 1000-row-per-request cap with .range().
+ *
+ * WHY THIS EXISTS: the monitor scans SCAN_DAYS (7) days. After a 20s-interval
+ * calibration session that window holds well over 1000 tank_sensor_log rows. A
+ * plain `.gte().order({ascending:true})` with no .range()/.limit() silently
+ * returns only the OLDEST 1000 rows in the window — so the monitor never sees
+ * recent data, every window it can see is already in ditch_fill_log (deduped),
+ * and it stops writing new windows entirely. That is exactly why ditch logging
+ * went dark after the 2026-06-22 calibration. Paginating returns the whole window.
+ * Throws on error; all callers run inside runDitchMonitor's try/catch.
+ */
+async function fetchAllSince(table, columns, tsColumn, sinceEpoch) {
+  const PAGE = 1000;
+  const all = [];
+  for (let from = 0; ; from += PAGE) {
+    const { data, error } = await supabase
+      .from(table)
+      .select(columns)
+      .gte(tsColumn, sinceEpoch)
+      .order(tsColumn, { ascending: true })
+      .range(from, from + PAGE - 1);
+    if (error) throw new Error(`${table} fetch failed: ${error.message}`);
+    if (!data || data.length === 0) break;
+    all.push(...data);
+    if (data.length < PAGE) break; // last page
+  }
+  return all;
+}
+
+// ──────────────────────────────────────────────
 // Utilities
 // ──────────────────────────────────────────────
 
@@ -223,29 +258,12 @@ async function findQualifyingWindows() {
   const now = Math.floor(Date.now() / 1000);
   const scanStart = now - (SCAN_DAYS * 24 * 60 * 60);
 
-  // Fetch tank readings
-  const { data: tankReadings, error: tankErr } = await supabase
-    .from('tank_sensor_log')
-    .select('timestamp, level_gallons')
-    .gte('timestamp', scanStart)
-    .order('timestamp', { ascending: true });
-
-  if (tankErr) {
-    console.error('[DITCH-MONITOR] Error fetching tank_sensor_log:', tankErr.message);
-    return [];
-  }
-
-  // Fetch zone states (all three controllers)
-  const { data: zoneStates, error: zoneErr } = await supabase
-    .from('zone_state_log')
-    .select('timestamp, controller, zone_id, state')
-    .gte('timestamp', scanStart)
-    .order('timestamp', { ascending: true });
-
-  if (zoneErr) {
-    console.error('[DITCH-MONITOR] Error fetching zone_state_log:', zoneErr.message);
-    return [];
-  }
+  // Fetch ALL tank readings + zone states in the scan window (paginated past the
+  // 1000-row cap — see fetchAllSince). Ordered ascending.
+  const tankReadings = await fetchAllSince(
+    'tank_sensor_log', 'timestamp, level_gallons', 'timestamp', scanStart);
+  const zoneStates = await fetchAllSince(
+    'zone_state_log', 'timestamp, controller, zone_id, state', 'timestamp', scanStart);
 
   const qualifyingWindows = [];
 
@@ -632,16 +650,10 @@ async function runDitchMonitor() {
     // Fetch tank readings for neighbor-draw detection
     const now = Math.floor(Date.now() / 1000);
     const scanStart = now - (SCAN_DAYS * 24 * 60 * 60);
-    const { data: tankReadings, error: tankErr } = await supabase
-      .from('tank_sensor_log')
-      .select('timestamp, level_gallons')
-      .gte('timestamp', scanStart)
-      .order('timestamp', { ascending: true });
-
-    if (tankErr) {
-      console.error('[DITCH-MONITOR] Error fetching tank readings:', tankErr.message);
-      return;
-    }
+    // Paginated past the 1000-row cap (see fetchAllSince) — otherwise a calibration
+    // burst pins this to the oldest 1000 rows and the monitor goes blind to recent days.
+    const tankReadings = await fetchAllSince(
+      'tank_sensor_log', 'timestamp, level_gallons', 'timestamp', scanStart);
 
     // Find qualifying windows
     const windows = await findQualifyingWindows();
@@ -684,17 +696,10 @@ async function runDitchMonitor() {
     const baseline = await getRollingBaseline();
     console.log(`[DITCH-MONITOR] Rolling baseline: ${baseline.toFixed(1)} GPM (last ${BASELINE_WINDOW_COUNT} windows)`);
 
-    // Fetch zone states for neighbor-draw detection (valves-OFF gating)
-    const { data: zoneStates, error: zoneErr } = await supabase
-      .from('zone_state_log')
-      .select('timestamp, controller, zone_id, state')
-      .gte('timestamp', scanStart)
-      .order('timestamp', { ascending: true });
-
-    if (zoneErr) {
-      console.error('[DITCH-MONITOR] Error fetching zone_state_log:', zoneErr.message);
-      return;
-    }
+    // Fetch zone states for neighbor-draw detection (valves-OFF gating).
+    // Paginated past the 1000-row cap (see fetchAllSince).
+    const zoneStates = await fetchAllSince(
+      'zone_state_log', 'timestamp, controller, zone_id, state', 'timestamp', scanStart);
 
     // STAGE 1: Neighbor-draw detection (passive logging across continuous scan period)
     // Scans ONLY valves-OFF periods to exclude own watering events
