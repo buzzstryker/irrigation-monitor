@@ -66,6 +66,80 @@ Lenovo (always on)
 
 ---
 
+## Post-Power-Outage Recovery: Tank Sensor Calibration
+
+> **⚠️ READ THIS FIRST after any power outage.** The Tuya ME201W ultrasonic tank
+> sensor does **not** persist its calibration through power loss. After an
+> outage, its **installation height** and **liquid maximum depth** reset to the
+> sensor's range-maximum default of **5.00 m**, which makes every reading clamp
+> at **1733 gal** (the strapping-table maximum) until it is manually corrected.
+> This happened on **July 4, 2026** and went unnoticed for weeks — see
+> `docs/tuya-device-diagnostic.md` for the full diagnosis.
+
+**Root cause:** `liquid_depth` is reported in meters (Tuya spec: `unit=m,
+scale=2`), so poll.js's `value / 100` conversion is correct — the units never
+changed. What breaks is the device-side calibration: with installation height
+reset to 5.00 m, the sensor computes water depth against a 5.00 m reference
+instead of the real ~1.04 m tank, so depth jumps from the normal ~0.94–1.05 m
+into the ~4.5–4.8 m range and pins the strapping table at its 41" / 1733 gal top
+row. **This is a device-config problem, not a code problem — do not "fix" it in
+`tank-strapping.js` or `poll.js`.**
+
+### How to recognize this failure
+
+- Dashboard shows tank level **pinned at 1733 gal** with no variation.
+- Railway logs show `[TANK-SENSOR] Cycle #NNNN | 400+cm → 1733 gal (CLAMPED
+  high)` on every reading — raw depth in the **400–500 cm** range instead of the
+  normal **90–110 cm**.
+- Tuya Smart Life app shows the sensor in **`liquid_state: upper_alarm`**.
+- The dashboard's low-tank warning **does not fire** even though calculated water
+  use says the tank should be low.
+
+### Restoration procedure (Smart Life app)
+
+Open the **Smart Life** app on a phone → select the tank sensor device →
+**Settings**, then set these calibration values:
+
+| Field (as labeled in Smart Life app) | Correct value |
+|---------------------------------------|---------------|
+| Installation height | **1.23 m** |
+| Liquid maximum depth | **1.04 m** (override the auto-fill from installation height) |
+| Set max % value (optional alarm threshold) | 95% |
+| Set min % value (optional alarm threshold) | 12% |
+
+- **The app auto-fills "Liquid maximum depth" to match "Installation height."**
+  Override it explicitly to **1.04 m** — this is the critical distinction between
+  *how high the sensor is mounted* (1.23 m) and *how deep water can go in the
+  tank* (1.04 m). Leaving them equal is effectively the failure state.
+- **Set max % / Set min % are alarm thresholds, not calibration.** They control
+  when the sensor reports `upper_alarm` / `lower_alarm` and do **not** affect the
+  depth measurement. Only touch them to change alarm behavior. The **12% minimum**
+  corresponds to the ~119 gal pump cutoff.
+
+### Verification (wait ~5 min for a fresh sensor report, then check)
+
+- Smart Life app shows a **plausible depth** (e.g., **0.94–1.05 m** for a
+  nearly-full tank), not ~4.6 m.
+- Smart Life app shows **`liquid_state: normal`** (not `upper_alarm`).
+- Railway logs (or `pm2 logs` if running locally) show tank readings **coming off
+  the 1733 clamp** — raw depth back in the ~90–110 cm range, no `(CLAMPED high)`.
+- Supabase `tank_sensor_log` most-recent rows show `level_gallons` reflecting
+  actual tank capacity, not the 1733 default:
+
+  ```sql
+  SELECT id, timestamp, depth_meters, level_gallons, clamped
+  FROM tank_sensor_log
+  ORDER BY timestamp DESC
+  LIMIT 10;
+  -- Healthy: depth_meters ~0.9–1.05, level_gallons well below 1733, clamped IS NULL
+  -- Broken:  depth_meters ~4.5–4.8, level_gallons = 1733, clamped = 'high'
+  ```
+
+If readings are still clamped after ~10 minutes, re-open the app and confirm
+**Liquid maximum depth** did not silently snap back to match installation height.
+
+---
+
 ## Controllers & Zones
 
 ### Garage Controller (id: 1659477) — flow meter physically installed
