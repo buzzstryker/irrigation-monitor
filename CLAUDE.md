@@ -11,7 +11,6 @@ A Node.js service running on a Lenovo Legion (Windows/WSL) that replaces static 
 
 **Local project path:** `C:\Users\buzzs\Projects\irrigation-monitor\`
 **GitHub:** Not yet pushed — create repo at github.com/buzzstryker/irrigation-monitor
-**Node version:** v22.22.2 (downgraded from 24 — better-sqlite3 requires this)
 **Process manager:** pm2 (two processes: irrigation-poll, irrigation-server)
 
 ---
@@ -305,7 +304,7 @@ Same timing, sod zones × 0.67 duration, drips unchanged.
 4. **Temperature threshold:** Don't water when forecast < 68°F (matches current Hydrawise Predictive Watering setting)
 5. **Hydrawise programs suspended** when Phase 4 takes control — system issues setzone commands only
 6. **Conflict detection:** Daily check that Hydrawise programs are still suspended — alert if re-enabled
-7. **sql.js was a failed workaround** for Node 24 — Node was downgraded to 22, better-sqlite3 reinstalled
+7. *(Retired: the Node 22 pin for better-sqlite3 no longer applies — the dependency was removed after the Supabase migration. Number kept so references to #8–#10 stay valid.)*
 8. **Per-zone GPM is static configuration** — Real-time flow measurement is not available via the Hydrawise REST API v1 (investigated and documented 2026-05-12; see docs/hydrawise-api-flow-fields.md). Per-zone GPM values are manually maintained in zones.config.js. These should be re-measured and updated whenever emitter configuration changes (added/removed/repaired outlets downstream of a valve). Tank-drawdown calibration via tank-drawdown-calibration.js is the recommended measurement method: run a zone for known duration, measure tank level before/after, subtract concurrent ditch fill, compute GPM.
 9. **Tank level: measured beats modeled** — Tuya ME201W reports liquid-level depth in meters; `tank-strapping.js` converts depth → gallons via the Norwesco 44407 elliptical strapping table (anchored to 1725 gal at 41"). `tuya.js` is a zero-dependency client (hand-rolled HMAC, built-in `crypto` + `fetch`). The strapping table is the canonical curve — never reimplement; refine in place by replacing modeled rows with empirical (depth, gallons) pairs collected during real drawdowns. The modeled `tank_level_log` keeps running in parallel until enough sensor data validates the curve.
 10. **Tuya sensor dedup: liquid_depth value, not update_time** — ME201W pushes liquid_depth to Tuya cloud every ~2.5 min (144-165s measured via Phase A/B tests, 2026-06-21). The device's `update_time` field is FROZEN/unreliable (stayed constant for 13+ hours, didn't advance during 10-min fast drawdown even as depth changed 64→58cm). poll.js polls every 2 minutes (env-overridable via TANK_POLL_INTERVAL_MS for calibration sessions) but only inserts a tank_sensor_log row when `liquid_depth` differs from the last logged value, OR when 20 minutes have elapsed since the last insert (heartbeat to prove logger is alive during owner absences). Dedup state (last logged depth + timestamp) is kept in memory; one harmless duplicate per process restart is acceptable. The `device_update_time` column is logged purely for diagnostics, not used in dedup logic. Hardcoded unit conversions (mm vs cm vs m) are forbidden until the DP code and unit are confirmed against a raw `/v1.0/devices/{id}/status` dump — a 1000× error sails right through the strapping table and writes plausible garbage.
