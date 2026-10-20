@@ -146,7 +146,7 @@ progress:
 - Node: v22.22.2
 - Process manager: pm2 (irrigation-poll + irrigation-server)
 - Database: SQLite (irrigation.db, 15 tables, synchronous getDb() pattern)
-- Local path: C:\Users\buzzs\Desktop\Projects\irrigation-monitor\
+- Local path: C:\Users\buzzs\Projects\irrigation-monitor\
 
 **APIs:**
 

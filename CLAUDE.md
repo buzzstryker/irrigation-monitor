@@ -9,7 +9,7 @@ This file gives Claude Code instant context about the project. Read this before 
 
 A Node.js service running on a Lenovo Legion (Windows/WSL) that replaces static Hydrawise programmed schedules with a dynamic, ET-driven zone controller. The system learns optimal water application rates per zone through a structured SMS observation feedback loop. All zone commands are issued via the Hydrawise `setzone` API. The Hydrawise app becomes monitoring-only — scheduling is owned by this software.
 
-**Local project path:** `C:\Users\buzzs\Desktop\Projects\irrigation-monitor\`
+**Local project path:** `C:\Users\buzzs\Projects\irrigation-monitor\`
 **GitHub:** Not yet pushed — create repo at github.com/buzzstryker/irrigation-monitor
 **Node version:** v22.22.2 (downgraded from 24 — better-sqlite3 requires this)
 **Process manager:** pm2 (two processes: irrigation-poll, irrigation-server)

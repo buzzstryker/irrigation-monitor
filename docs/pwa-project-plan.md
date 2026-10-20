@@ -78,7 +78,7 @@ This means RLS policies need to be configured on the relevant tables (tank_level
 ### Authentication
 
 This project follows the cross-project auth standards in
-`C:\Users\buzzs\Desktop\Projects\Buzz_Project_Development_Procedure.md`,
+`C:\Users\buzzs\Projects\buzz-project-docs\Buzz_Project_Development_Procedure.md`,
 sections 2.2b through 2.2d. Required reading before implementing Phase C.
 
 **Project-specific decisions:**

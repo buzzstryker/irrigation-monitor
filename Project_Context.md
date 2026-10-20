@@ -24,7 +24,7 @@ A Node.js service running on a Lenovo Legion (Windows/WSL, always-on) that repla
 ## Repo structure
 
 - **GitHub:** https://github.com/buzzstryker/irrigation-monitor
-- **Local path:** `C:\Users\buzzs\Desktop\Projects\irrigation-monitor\` (DELIBERATELY OUTSIDE OneDrive — see Key decisions)
+- **Local path:** `C:\Users\buzzs\Projects\irrigation-monitor\` (DELIBERATELY OUTSIDE OneDrive — see Key decisions)
 - **Default branch:** `master`
 - **Top-level layout:**
   - `poll.js` — Hydrawise polling loop, all 3 controllers, every 60s
@@ -48,7 +48,7 @@ See CLAUDE.md "Database Schema (13 tables)" section for the canonical table list
 ## Key decisions
 
 - Two-doc design: this file (Project_Context.md) is the procedural anchor (working agreement, stack, repo, high-level overview). CLAUDE.md is the operational anchor (zones, schema, phases, optimized schedule, key design decisions). Both are authoritative for their respective scopes. See "Cross-reference" section below.
-- **Project deliberately lives OUTSIDE OneDrive at `C:\Users\buzzs\Desktop\Projects\irrigation-monitor\`.** The procedure doc's OneDrive\Desktop\Projects convention is overridden here for technical reasons: SQLite write-ahead log files (.db-wal, .db-shm) are rewritten constantly by the always-on poll process, and OneDrive sync attempting to upload these mid-write is a real risk for lock contention or database corruption. If this project is ever migrated to a server without an always-on local SQLite write workload, the OneDrive convention can be reconsidered.
+- **Project deliberately lives OUTSIDE OneDrive at `C:\Users\buzzs\Projects\irrigation-monitor\`.** The procedure doc's OneDrive\Desktop\Projects convention is overridden here for technical reasons: SQLite write-ahead log files (.db-wal, .db-shm) are rewritten constantly by the always-on poll process, and OneDrive sync attempting to upload these mid-write is a real risk for lock contention or database corruption. If this project is ever migrated to a server without an always-on local SQLite write workload, the OneDrive convention can be reconsidered.
 - No zone square footage — ET-to-gallons uses historical summer baseline ÷ summer ET avg instead.
 - Barn controller has no flow meter — uses duration scaling: runtime = baseline_minutes × (ET/ET_avg) × Kz.
 - Pool Equipment flow meter is permanently unreliable — Pool zones are physically downstream of the Garage flow meter, so flow is attributed to the Garage meter via a flowMeterAttribution config block, using capped Garage Z5 as a gating dummy (per Phase 4 attribution design, 2026-05-11).
